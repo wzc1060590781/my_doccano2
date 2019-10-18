@@ -37,7 +37,6 @@ class CreateUserSerializer(serializers.ModelSerializer):
         }
 
     def validate_project_id(self, project_id):
-        print(project_id)
         try:
             id = int(project_id)
         except Exception:
@@ -46,6 +45,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
             project = Project.objects.get(pk=id)
         except Exception:
             raise serializers.ValidationError('该项目不存在')
+        return project_id
 
     def validate(self, data):
         # 判断两次密码
@@ -58,10 +58,14 @@ class CreateUserSerializer(serializers.ModelSerializer):
 
         # 移除数据库模型类中不存在的属性
         del validated_data['password2']
+        project_id = validated_data["project_id"]
+        del validated_data['project_id']
         user = super().create(validated_data)
         user.set_password(validated_data['password'])
+        # Project_User.save(project_id=validated_data["project_id"], user_id=user.id)
         user.save()
-        Project_User.save(project_id=validated_data["project_id"], user_id=user.id)
+        project = Project.objects.get(pk=int(project_id))
+        user.projects.add(project)
         return user
 
 
@@ -93,7 +97,6 @@ class LabelSerializer(serializers.ModelSerializer):
         if not value.startswith("#"):
             raise serializers.ValidationError("颜色字符串应以#开始")
         for i in value[1:]:
-            print(i)
             if i not in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"]:
                 raise serializers.ValidationError("颜色输入有误，所包含字符必须在[0-9,a-f]内")
         return value
@@ -148,7 +151,6 @@ class AnnotationSerializer(serializers.ModelSerializer):
         if start_offset >= end_offset:
             raise serializers.ValidationError("开始下标应小于结束下标")
         document_id = self.context["view"].kwargs["doc_id"]
-        print(document_id)
         document = Document.objects.get(pk=int(document_id))
         if end_offset > len(document.text):
             raise serializers.ValidationError("结束下标不得超出文本长度")
