@@ -176,7 +176,6 @@ class DocumentSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         text = attrs.get("text_upload", None)
-        # print(text.name)
         text_str = text.read().decode("utf-8")
         if not text:
             raise serializers.ValidationError('未上传文件')

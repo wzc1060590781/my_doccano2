@@ -7,6 +7,9 @@ from rest_framework.generics import CreateAPIView, GenericAPIView, ListAPIView, 
 
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.viewsets import ModelViewSet
+
+from app.utils.Viewset import ApiModelViewSet
 from .models import User, Project, Document
 from . import serializers
 
@@ -18,20 +21,17 @@ class UsernameCountView(APIView):
         """
         count = User.objects.filter(username=username).count()
 
-        data = {
-            'username': username,
-            'count': count
+        response_data = {
+            "status": 200,
+            "data": {
+                'username': username,
+                'count': count
+            }
         }
-
-        return Response(data)
-
-
-class UserListCreateView(ListAPIView, CreateAPIView):
-    serializer_class = serializers.CreateUserSerializer
-    queryset = User.objects.all()
+        return Response(response_data)
 
 
-class UserRetrieveUpdateDestroyView(UpdateAPIView, DestroyAPIView, RetrieveAPIView):
+class UserView(ApiModelViewSet):
     serializer_class = serializers.CreateUserSerializer
     queryset = User.objects.all()
 
@@ -52,27 +52,19 @@ class LoginView(GenericAPIView):
 
 # url(r'^projects/(?P<pk>\d+)/$', views.ProjectListView.as_view()),
 # 创建项目，项目列表
-class ProjectView(CreateAPIView, ListAPIView):
-    serializer_class = serializers.ProjectSerializer
-    queryset = Project.objects.all()
-
-
-# projects/(?P<pk>\d+)/
-# 修改项目，删除项目
-class ProjectCreateUpdateDestoryView(UpdateAPIView, DestroyAPIView, RetrieveAPIView):
+class ProjectView(ApiModelViewSet):
     serializer_class = serializers.ProjectSerializer
     queryset = Project.objects.all()
 
     def get(self, request, pk, *args, **kwargs):
         response = super().get(request, pk, *args, **kwargs)
-        # print(Project.objects.get(pk=pk).documents.all().count())
         response.data["count"] = Project.objects.get(pk=pk).documents.all().count()
         return response
 
 
 # projects/(?P<project_id>\d+)/docs/
 # 上传文件和查看文件列表
-class DocCreateListView(ListCreateAPIView):
+class DocView(ApiModelViewSet):
     serializer_class = serializers.DocumentSerializer
     filter_fields = ("is_annoteated",)
     ordering_fields = ('-id')
@@ -113,17 +105,7 @@ class DocCreateListView(ListCreateAPIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-# projects/(?P<project_id>\d+)/docs/(?P<pk>\d+)/
-# 查看单个文本，删除文本(逻辑删除)
-class DocGetDeleteView(DestroyAPIView, RetrieveAPIView):
-    serializer_class = serializers.DocumentSerializer
-
-    def get_queryset(self):
-        project = get_object_or_404(Project, pk=self.kwargs['project_id'])
-        return project.documents.all()
-
-
-class LabelCreateListView(ListCreateAPIView):
+class LabelView(ApiModelViewSet):
     serializer_class = serializers.LabelSerializer
 
     def get_queryset(self):
@@ -138,16 +120,7 @@ class LabelCreateListView(ListCreateAPIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-# update请求方式patch
-class LabelGetDeleteView(UpdateAPIView, DestroyAPIView, RetrieveAPIView):
-    serializer_class = serializers.LabelSerializer
-
-    def get_queryset(self):
-        project = get_object_or_404(Project, pk=self.kwargs['project_id'])
-        return project.labels.all()
-
-
-class AnnotationCreateListView(ListCreateAPIView):
+class AnnotationView(ApiModelViewSet):
     serializer_class = serializers.AnnotationSerializer
 
     def get_queryset(self):
@@ -162,15 +135,6 @@ class AnnotationCreateListView(ListCreateAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-
-class AnnotationDeleteView(DestroyAPIView):
-    serializer_class = serializers.AnnotationSerializer
-
-    def get_queryset(self):
-        project = get_object_or_404(Project, pk=self.kwargs['project_id'])
-        document = get_object_or_404(Document, pk=self.kwargs["doc_id"])
-        return document.annotations.all()
 
     def delete(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -182,7 +146,6 @@ class AnnotationDeleteView(DestroyAPIView):
 
 
 class StatisticView(APIView):
-    # serializer_class = serializers.StatisticSerializer
 
     def get(self, request, *args, **kwargs):
         project = get_object_or_404(Project, pk=self.kwargs['project_id'])

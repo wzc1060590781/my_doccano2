@@ -24,7 +24,7 @@ SECRET_KEY = '=tzzp91o*@aqpwkfnah$&a!nlwk$@=r@u+f5r1ib4v%hyvv*5u'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 # Application definition
 
@@ -122,7 +122,8 @@ AUTH_PASSWORD_VALIDATORS = [
 
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'app.utils.pagination.StandardResultsSetPagination',
-    "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",)
+    "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
+    'EXCEPTION_HANDLER': 'app.utils.exception_had.custom_exception_handler'
 }
 
 TIME_ZONE = 'Asia/Shanghai'
