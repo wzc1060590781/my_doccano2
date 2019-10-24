@@ -14,8 +14,8 @@ PROJECT_CHOICES = (
 
 
 class BaseModel(models.Model):
-    create_time = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
-    update_time = models.DateTimeField(auto_now=True, verbose_name="更新时间")
+    create_time = models.DateTimeField(auto_now_add=True, verbose_name="创建时间", help_text="创建时间")
+    update_time = models.DateTimeField(auto_now=True, verbose_name="更新时间", help_text="更新时间")
 
     class Meta:
         abstract = True
@@ -24,7 +24,7 @@ class BaseModel(models.Model):
 # # Create your models here.
 class User(AbstractUser):
     role = models.ForeignKey("Role", related_name="users", blank=True, on_delete=models.SET_NULL, verbose_name="角色",
-                             null=True)
+                             null=True, help_text="角色")
 
     def __str__(self):
         return self.username
@@ -36,7 +36,7 @@ class User(AbstractUser):
 
 
 class Role(BaseModel):
-    name = models.CharField(max_length=20, unique=True, verbose_name="角色")
+    name = models.CharField(max_length=20, unique=True, verbose_name="角色", help_text="角色名")
 
     class Meta:
         db_table = "tb_roles"
@@ -44,16 +44,16 @@ class Role(BaseModel):
 
 
 class Project(BaseModel):
-    name = models.CharField(max_length=20, unique=True, verbose_name="项目名称")
+    name = models.CharField(max_length=20, unique=True, verbose_name="项目名称", help_text="项目名称")
     owner = models.ForeignKey("User", related_name="projects", blank=True, on_delete=models.SET_NULL, null=True,
-                              verbose_name="项目管理者")
-    randomize_document_order = models.BooleanField(default=False, verbose_name="是否乱序")
-    description = models.TextField(default='')
-    project_type = models.CharField(max_length=30, choices=PROJECT_CHOICES)
+                              verbose_name="项目管理者", help_text="项目管理者")
+    randomize_document_order = models.BooleanField(default=False, verbose_name="是否乱序", help_text="是否乱序")
+    description = models.TextField(default='', help_text="项目描述信息")
+    project_type = models.CharField(max_length=30, choices=PROJECT_CHOICES, help_text="项目类型")
     users = models.ManyToManyField(
         User,
         through='Project_User',  ## 自定义中间表
-        through_fields=('project', 'user'),
+        through_fields=('project', 'user'), help_text="用户"
     )
 
     class Meta:
@@ -62,17 +62,18 @@ class Project(BaseModel):
 
 
 class Project_User(BaseModel):
-    project = models.ForeignKey(Project, on_delete=models.CASCADE)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, related_name="project_contains_users", on_delete=models.CASCADE,
+                                help_text="项目")
+    user = models.ForeignKey(User, related_name="user_in_projects", on_delete=models.CASCADE, help_text="用户")
 
 
 class Document(BaseModel):
     project = models.ForeignKey("Project", related_name="documents", blank=True, on_delete=models.SET_NULL, null=True,
-                                verbose_name="所属项目")
-    text = models.TextField(verbose_name="文书内容")
-    is_annoteated = models.BooleanField(default=False, verbose_name="文本是否已被标注")
-    is_delete = models.BooleanField(default=False, verbose_name="文本是否被逻辑删除")
-    title = models.CharField(verbose_name="文档标题", max_length=100, null=True)
+                                verbose_name="所属项目", help_text="所属项目")
+    text = models.TextField(verbose_name="文书内容", help_text="文书内容")
+    is_annoteated = models.BooleanField(default=False, verbose_name="文本是否已被标注", help_text="是否被标注")
+    is_delete = models.BooleanField(default=False, verbose_name="文本是否被逻辑删除", help_text="是否被删除")
+    title = models.CharField(verbose_name="文档标题", max_length=100, null=True, help_text="文档标题")
 
     class Meta:
         db_table = "documents"

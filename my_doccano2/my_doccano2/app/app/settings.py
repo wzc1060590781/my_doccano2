@@ -22,7 +22,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = '=tzzp91o*@aqpwkfnah$&a!nlwk$@=r@u+f5r1ib4v%hyvv*5u'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ["*"]
 
@@ -123,7 +123,8 @@ AUTH_PASSWORD_VALIDATORS = [
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'app.utils.pagination.StandardResultsSetPagination',
     "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
-    'EXCEPTION_HANDLER': 'app.utils.exception_had.custom_exception_handler'
+    'EXCEPTION_HANDLER': 'app.utils.exception_had.custom_exception_handler',
+    'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.AutoSchema',
 }
 
 TIME_ZONE = 'Asia/Shanghai'
@@ -139,3 +140,5 @@ USE_TZ = False
 # https://docs.djangoproject.com/en/2.0/howto/static-files/
 
 STATIC_URL = '/static/'
+
+LANGUAGE_CODE = 'zh-hans'

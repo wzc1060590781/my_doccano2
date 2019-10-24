@@ -1,5 +1,5 @@
 from django.contrib.auth import authenticate
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 
 from rest_framework import request, mixins, status
 from rest_framework.generics import CreateAPIView, GenericAPIView, ListAPIView, UpdateAPIView, DestroyAPIView, \
@@ -32,13 +32,17 @@ class UsernameCountView(APIView):
 
 
 class UserView(ApiModelViewSet):
+    """
+    list:
+    返回用户列表
+    """
     serializer_class = serializers.CreateUserSerializer
     queryset = User.objects.all()
 
 
-class LoginView(GenericAPIView):
-    def get(self, request, *args, **kwargs):
-        return Response({"message": "欢迎进入登录页面"})
+class LoginView(APIView):
+    # def get(self, request, *args, **kwargs):
+    #     return Response({"message": "欢迎进入登录页面"})
 
     def post(self, request, *args, **kwargs):
         username = request.data["username"]
@@ -112,7 +116,7 @@ class LabelView(ApiModelViewSet):
         project = get_object_or_404(Project, pk=self.kwargs['project_id'])
         return project.labels.all()
 
-    def post(self, request, *args, **kwargs):
+    def create(self, request, *args, **kwargs):
         project = get_object_or_404(Project, pk=self.kwargs['project_id'])
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -146,7 +150,6 @@ class AnnotationView(ApiModelViewSet):
 
 
 class StatisticView(APIView):
-
     def get(self, request, *args, **kwargs):
         project = get_object_or_404(Project, pk=self.kwargs['project_id'])
         labels_list = project.labels.all()
@@ -158,3 +161,17 @@ class StatisticView(APIView):
         data["total"] = project.documents.all().count()
         data["remaining"] = project.documents.filter(is_annoteated=False).count()
         return Response(data=data, status=status.HTTP_200_OK)
+
+
+class MyException(ModelViewSet):
+    def create(self, request, *args, **kwargs):
+        return Response({"message": "路径错误", "success": False, "status":404})
+
+    def retrieve(self, request, *args, **kwargs):
+        return Response({"message": "路径错误", "success": False, "status": 404})
+
+    def update(self, request, *args, **kwargs):
+        return Response({"message": "路径错误", "success": False, "status": 404})
+
+    def destroy(self, request, *args, **kwargs):
+        return Response({"message": "路径错误", "success": False, "status": 404})

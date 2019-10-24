@@ -12,17 +12,15 @@ def custom_exception_handler(exc, context):
         response.data['status'] = response.status_code
         if response.status_code == 404:
             response.data['message'] = "不存在该资源"
-            response.data['success'] = False
-        del response.data["detail"]
-        response.data["data"] = []
-
+            del response.data["detail"]
+            response.data["data"] = []
+        elif response.status_code == 400:
+            response.data['message'] = "参数错误"
+        response.data['success'] = False
     if response is None:
-        # view = context['view']
         if isinstance(exc, DatabaseError):
-            # 数据库异常
-            # logger.error('[%s] %s' % (view, exc))
             response.data['status'] = status.HTTP_507_INSUFFICIENT_STORAGE
             response.data['message'] = "服务器内部错误"
             response.status = status.HTTP_507_INSUFFICIENT_STORAGE
-        # response.data["message"] = "异常"
+
     return response

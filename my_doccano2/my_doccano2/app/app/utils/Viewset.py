@@ -10,7 +10,7 @@ class ApiModelViewSet(ModelViewSet):
             "success": True,
             "message": "成功",
             "data": response.data
-        }, headers=response.status_code)
+        }, status=response.status_code)
 
     def retrieve(self, request, *args, **kwargs):
         response = super().retrieve(request, *args, **kwargs)
