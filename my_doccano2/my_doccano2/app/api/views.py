@@ -1,34 +1,28 @@
+import random
+
 from django.contrib.auth import authenticate
+from django.contrib.auth.views import PasswordResetView
+from django.db import transaction
+from django.http import JsonResponse, HttpResponseForbidden, Http404
 from django.shortcuts import render, get_object_or_404, redirect
 
 from rest_framework import request, mixins, status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import CreateAPIView, GenericAPIView, ListAPIView, UpdateAPIView, DestroyAPIView, \
     RetrieveAPIView, ListCreateAPIView
+from rest_framework.mixins import CreateModelMixin, ListModelMixin
+from rest_framework.permissions import IsAuthenticated
 
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
 from app.utils.Viewset import ApiModelViewSet
-from .models import User, Project, Document
+
+from .models import User, Project, Document, ProjectUser, Annotation
 from . import serializers
-
-
-class UsernameCountView(APIView):
-    def get(self, request, username):
-        """
-        获取指定用户名数量
-        """
-        count = User.objects.filter(username=username).count()
-
-        response_data = {
-            "status": 200,
-            "data": {
-                'username': username,
-                'count': count
-            }
-        }
-        return Response(response_data)
+from .permissions import ProjectOperationPermission, DocumentOperationPermission, UserOperationPermission, \
+    LabelOperationPermission, AnnotationOperationPermission, ProjectUserPermission
 
 
 class UserView(ApiModelViewSet):
@@ -36,29 +30,70 @@ class UserView(ApiModelViewSet):
     list:
     返回用户列表
     """
-    serializer_class = serializers.CreateUserSerializer
-    queryset = User.objects.all()
+    permission_classes = [IsAuthenticated, UserOperationPermission]
+
+    queryset = User.objects.filter(is_delete=False)
+
+    def get_serializer_class(self):
+        if self.action == "update":
+            if self.kwargs["pk"] == str(self.request.user.id):
+                return serializers.UpdateSelfSerializer
+            return serializers.UpdateOtherUserSerializer
+        else:
+            return serializers.CreateUserSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        instance = get_object_or_404(User, pk=self.kwargs['pk'])
+        print(instance.is_superuser)
+        if instance.is_superuser:
+            raise PermissionDenied("不可删除超级管理员")
+        elif instance.system_role == "system_manager" and not request.user.is_superuser:
+            raise PermissionDenied("权限不足")
+        instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class LoginView(APIView):
-    # def get(self, request, *args, **kwargs):
-    #     return Response({"message": "欢迎进入登录页面"})
+class ChangePasswordView(CreateModelMixin, GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = serializers.ChangePasswordSerializer
 
-    def post(self, request, *args, **kwargs):
-        username = request.data["username"]
-        password = request.data["password"]
-        user = authenticate(username=username, password=password)
-        if user:
-            return Response({"id": user.id, "username": user.username})
-        # TODO
-        return Response({"message": "用户名或密码错误"})
+
+# class LoginView(GenericAPIView):
+#     # def get(self, request, *args, **kwargs):
+#     #     return Response({"message": "欢迎进入登录页面"})
+#
+#     def post(self, request, *args, **kwargs):
+#         try:
+#             username = request.data["username"]
+#         except:
+#             return Response({"message": "请求失败", "status": status.HTTP_400_BAD_REQUEST, "success": False},
+#                             status=status.HTTP_400_BAD_REQUEST)
+#         try:
+#             password = request.data["password"]
+#         except:
+#             return Response({"message": "请求失败", "status": status.HTTP_400_BAD_REQUEST, "success": False},
+#                             status=status.HTTP_400_BAD_REQUEST)
+#         user = authenticate(username=username, password=password)
+#         if user:
+#             print("登录成功")
+#             return Response({"id": user.id, "username": user.username, "message": "请求成功", "status": status.HTTP_200_OK,
+#                              "success": True})
+#         # TODO
+#         return Response({"message": "请求失败", "status": status.HTTP_400_BAD_REQUEST, "success": False},
+#                         status=status.HTTP_400_BAD_REQUEST)
 
 
 # url(r'^projects/(?P<pk>\d+)/$', views.ProjectListView.as_view()),
 # 创建项目，项目列表
 class ProjectView(ApiModelViewSet):
     serializer_class = serializers.ProjectSerializer
-    queryset = Project.objects.all()
+    permission_classes = [IsAuthenticated, ProjectOperationPermission]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return Project.objects.all()
+        return user.project_set.all()
 
     def get(self, request, pk, *args, **kwargs):
         response = super().get(request, pk, *args, **kwargs)
@@ -69,13 +104,18 @@ class ProjectView(ApiModelViewSet):
 # projects/(?P<project_id>\d+)/docs/
 # 上传文件和查看文件列表
 class DocView(ApiModelViewSet):
+    permission_classes = [IsAuthenticated, DocumentOperationPermission]
     serializer_class = serializers.DocumentSerializer
     filter_fields = ("is_annoteated",)
     ordering_fields = ('-id')
 
     def get_queryset(self):
         project = get_object_or_404(Project, pk=self.kwargs['project_id'])
-        return project.documents.all().filter(is_delete=False)
+        if project in self.request.user.project_set.all():
+            qs = project.documents.all().filter(is_delete=False)
+            return qs
+        else:
+            raise PermissionDenied
 
     def get(self, request, *args, **kwargs):
         response = super().get(request, *args, **kwargs)
@@ -110,11 +150,15 @@ class DocView(ApiModelViewSet):
 
 
 class LabelView(ApiModelViewSet):
+    permission_classes = [IsAuthenticated, LabelOperationPermission]
     serializer_class = serializers.LabelSerializer
 
     def get_queryset(self):
         project = get_object_or_404(Project, pk=self.kwargs['project_id'])
-        return project.labels.all()
+        if project in self.request.user.project_set.all() or self.request.user.is_superuser:
+            return project.labels.all()
+        else:
+            raise PermissionDenied
 
     def create(self, request, *args, **kwargs):
         project = get_object_or_404(Project, pk=self.kwargs['project_id'])
@@ -126,27 +170,62 @@ class LabelView(ApiModelViewSet):
 
 class AnnotationView(ApiModelViewSet):
     serializer_class = serializers.AnnotationSerializer
+    permission_classes = [IsAuthenticated, AnnotationOperationPermission]
 
     def get_queryset(self):
         project = get_object_or_404(Project, pk=self.kwargs['project_id'])
         document = get_object_or_404(Document, pk=self.kwargs["doc_id"])
-        return document.annotations.all()
+        if self.request.user.is_superuser:
+            return document.annotations.all()
+        if project in self.request.user.project_set.all() and document in project.documents.all():
+            return document.annotations.all()
+        else:
+            raise PermissionDenied
 
     def post(self, request, *args, **kwargs):
         project = get_object_or_404(Project, pk=self.kwargs['project_id'])
         document = get_object_or_404(Document, pk=self.kwargs["doc_id"])
+        if document not in project.documents.all():
+            raise Http404
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    def delete(self, request, *args, **kwargs):
-        instance = self.get_object()
-        if len(instance.document.annotations.all()) == 1:
-            instance.document.is_annoteated = False
-            instance.document.save()
-        instance.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+    def destroy(self, request, *args, **kwargs):
+        document_id = self.kwargs["doc_id"]
+        document = get_object_or_404(Document, pk=document_id)
+        with transaction.atomic():
+            save_id = transaction.savepoint()
+            while True:
+                instance = self.get_object()
+                instance.delete()
+                try:
+                    result = Document.objects.filter(pk=instance.document.id, annotations=None).update(
+                        is_annoteated=False)
+                    if result:
+                        return Response(status=status.HTTP_204_NO_CONTENT)
+                    else:
+                        transaction.rollback(save_id)
+                        continue
+                except AttributeError:
+                    return Response(status=status.HTTP_204_NO_CONTENT)
+                # except:
+                #     transaction.rollback(save_id)
+
+
+class ProjectUserView(ApiModelViewSet):
+    serializer_class = serializers.ProjectUserSerializer
+    queryset = ProjectUser.objects.all()
+    permission_classes = [IsAuthenticated, ProjectUserPermission]
+
+    def destroy(self, request, *args, **kwargs):
+        instance = get_object_or_404(ProjectUser, pk=self.kwargs['pk'])
+        if request.user.is_superuser or request.user.system_role == "system_manager":
+            instance.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        elif instance.role == "project_owner":
+            raise PermissionDenied("没有删除project_owner权限")
 
 
 class StatisticView(APIView):
@@ -165,7 +244,7 @@ class StatisticView(APIView):
 
 class MyException(ModelViewSet):
     def create(self, request, *args, **kwargs):
-        return Response({"message": "路径错误", "success": False, "status":404})
+        return Response({"message": "路径错误", "success": False, "status": 404})
 
     def retrieve(self, request, *args, **kwargs):
         return Response({"message": "路径错误", "success": False, "status": 404})

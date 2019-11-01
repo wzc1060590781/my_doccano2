@@ -1,6 +1,6 @@
 import string
 
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, Group, UserManager
 from django.db import models
 
 DOCUMENT_CLASSIFICATION = 'DocumentClassification'
@@ -10,6 +10,11 @@ PROJECT_CHOICES = (
     (DOCUMENT_CLASSIFICATION, 'document classification'),
     (SEQUENCE_LABELING, 'sequence labeling'),
     (SEQ2SEQ, 'sequence to sequence'),
+)
+SYSTEM_ROLE_CHOICE = (
+    ("ordinary_user", "ordinary_user"),
+    ("system_manager", "system_manager"),
+    ("super_user", "super_user")
 )
 
 
@@ -21,13 +26,19 @@ class BaseModel(models.Model):
         abstract = True
 
 
-# # Create your models here.
 class User(AbstractUser):
-    role = models.ForeignKey("Role", related_name="users", blank=True, on_delete=models.SET_NULL, verbose_name="角色",
-                             null=True, help_text="角色")
+    # group = models.ForeignKey("tb_users_groups", related_name="users", blank=True, on_delete=models.SET_NULL,
+    #                           verbose_name="角色", help_text="角色")
+    phone_number = models.CharField(max_length=11, null=True, verbose_name="手机号")
+    is_delete = models.BooleanField(default=False)
+    system_role = models.CharField(max_length=30, choices=SYSTEM_ROLE_CHOICE, help_text="系统角色", null=True, blank=True)
 
     def __str__(self):
         return self.username
+
+    def delete(self, using=None, keep_parents=False):
+        self.is_delete = True
+        self.save()
 
     class Meta:
         db_table = "tb_users"
@@ -35,24 +46,23 @@ class User(AbstractUser):
         verbose_name_plural = verbose_name
 
 
-class Role(BaseModel):
-    name = models.CharField(max_length=20, unique=True, verbose_name="角色", help_text="角色名")
-
-    class Meta:
-        db_table = "tb_roles"
-        verbose_name = "角色表"
+class UserManager(UserManager):
+    def create_superuser(self, username, email, password, **extra_fields):
+        user = super().create_superuser(username, email, password, **extra_fields)
+        user.system_role = "super_user"
+        # group = Group.objects.get(pk=1)
+        # group.user_set.add(user)
+        return user
 
 
 class Project(BaseModel):
     name = models.CharField(max_length=20, unique=True, verbose_name="项目名称", help_text="项目名称")
-    owner = models.ForeignKey("User", related_name="projects", blank=True, on_delete=models.SET_NULL, null=True,
-                              verbose_name="项目管理者", help_text="项目管理者")
     randomize_document_order = models.BooleanField(default=False, verbose_name="是否乱序", help_text="是否乱序")
     description = models.TextField(default='', help_text="项目描述信息")
     project_type = models.CharField(max_length=30, choices=PROJECT_CHOICES, help_text="项目类型")
     users = models.ManyToManyField(
         User,
-        through='Project_User',  ## 自定义中间表
+        through='ProjectUser',  ## 自定义中间表
         through_fields=('project', 'user'), help_text="用户"
     )
 
@@ -61,10 +71,23 @@ class Project(BaseModel):
         verbose_name = "项目表"
 
 
-class Project_User(BaseModel):
-    project = models.ForeignKey(Project, related_name="project_contains_users", on_delete=models.CASCADE,
+class ProjectUser(BaseModel):
+    Roles = (
+        ('project_owner', 'project_owner'),
+        ('user', 'user')
+    )
+    project = models.ForeignKey(Project, on_delete=models.CASCADE,
                                 help_text="项目")
-    user = models.ForeignKey(User, related_name="user_in_projects", on_delete=models.CASCADE, help_text="用户")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, help_text="用户")
+    # TODO
+    role = models.CharField(max_length=20, blank=False, null=False, choices=Roles)
+
+    class Meta:
+        db_table = "project_user_relationship"
+        verbose_name = "项目用户表"
+        unique_together = (
+            ('project', 'user'),
+        )
 
 
 class Document(BaseModel):
@@ -78,10 +101,9 @@ class Document(BaseModel):
     class Meta:
         db_table = "documents"
         verbose_name = "文书表"
-        # ordering = ["-create_time"]
 
-    # def __str__(self):
-    #     return self.text[:50]
+    def __str__(self):
+        return self.text[:50]
 
     def delete(self, using=None, keep_parents=False):
         """重写数据库删除方法实现逻辑删除"""
@@ -95,8 +117,8 @@ class Annotation(BaseModel):
     # 概率
     prob = models.FloatField(default=0.0)
     # 是否人工标注
-    user = models.ForeignKey("User", related_name="annotations", null=True, on_delete=models.SET_NULL,
-                             verbose_name="打标签者")
+    annoted_by = models.ForeignKey("User", related_name="annotations", null=True, on_delete=models.SET_NULL,
+                                   verbose_name="打标签者")
     manual = models.BooleanField(default=False)
     # 所用标记
     label = models.ForeignKey("Label", related_name="annotations", on_delete=models.SET_NULL, null=True,
@@ -104,7 +126,7 @@ class Annotation(BaseModel):
     # 文档中的开始位置
     start_offset = models.IntegerField(verbose_name="标记开始下标")
     # 文档中的结束位置
-    end_offset = models.IntegerField()
+    end_offset = models.IntegerField(verbose_name="标记结束下标")
 
     class Meta:
         db_table = "annotations"
@@ -128,7 +150,7 @@ class Label(BaseModel):
     text_color = models.CharField(max_length=7, default='#ffffff')
     project = models.ForeignKey(Project, related_name='labels', on_delete=models.CASCADE)
     prefix_key = models.CharField(max_length=10, blank=True, null=True, choices=PREFIX_KEYS)
-    suffix_key = models.CharField(max_length=1, blank=True, null=True, choices=SUFFIX_KEYS)
+    suffix_key = models.CharField(max_length=10, blank=True, null=True, choices=SUFFIX_KEYS)
 
     class Meta:
         db_table = "labels"
@@ -139,3 +161,15 @@ class Label(BaseModel):
 
     def __str__(self):
         return self.text
+
+
+class algorithm(BaseModel):
+    algorithm_type = models.CharField(max_length=30, choices=PROJECT_CHOICES, help_text="算法类型")
+    name = models.CharField(max_length=100, unique=True)
+    mini_quantity = models.IntegerField(null=False, verbose_name="最小训练集")
+    code_url = models.CharField(max_length=255, null=False, unique=True, verbose_name="算法代码路径")
+    model_url = models.CharField(max_length=255, null=False, unique=True, verbose_name="算法模型路径")
+    description = models.TextField(default="",verbose_name="算法描述")
+
+    def __str__(self):
+        return self.name

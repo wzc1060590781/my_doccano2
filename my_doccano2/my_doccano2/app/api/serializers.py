@@ -2,70 +2,175 @@ import json
 import re
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import check_password
+from django.contrib.auth.models import Group
+from django.db import transaction, DatabaseError
 from django.db.models import Q
+from django.http import Http404
 from rest_framework import serializers
+from django.shortcuts import get_object_or_404
+from rest_framework.exceptions import PermissionDenied
 
-from .models import User, Project, Project_User, Document, Label, Annotation
+from .models import User, Project, ProjectUser, Document, Label, Annotation
 
 
 class CreateUserSerializer(serializers.ModelSerializer):
     """创建用户的序列化器"""
     password2 = serializers.CharField(label='确认密码', write_only=True)
-    project_id = serializers.CharField(label="所在项目", write_only=True)
+    phone_number = serializers.CharField(label="手机号")
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'password', 'password2', "project_id")
+        fields = ('id', 'username', 'password', 'password2', "phone_number", "system_role")
         extra_kwargs = {
             'username': {
-                'min_length': 5,
+                'min_length': 3,
                 'max_length': 20,
                 'error_messages': {
-                    'min_length': '仅允许5-20个字符的用户名',
-                    'max_length': '仅允许5-20个字符的用户名',
+                    'min_length': '仅允许3-20个字符的用户名',
+                    'max_length': '仅允许3-20个字符的用户名',
                 }
             },
             'password': {
                 'write_only': True,
-                'min_length': 8,
+                'min_length': 6,
                 'max_length': 20,
                 'error_messages': {
-                    'min_length': '仅允许8-20个字符的密码',
-                    'max_length': '仅允许8-20个字符的密码',
+                    'min_length': '仅允许6-20个字符的密码',
+                    'max_length': '仅允许6-20个字符的密码',
                 }
             }
         }
 
-    def validate_project_id(self, project_id):
-        try:
-            id = int(project_id)
-        except Exception:
-            raise serializers.ValidationError("项目id必须为整数")
-        try:
-            project = Project.objects.get(pk=id)
-        except Exception:
-            raise serializers.ValidationError('该项目不存在')
-        return project_id
+    def validate_phone_number(self, value):
+        """验证手机号"""
+        print("*****************")
+        if not re.match(r'^1[3-9]\d{9}$', value):
+            raise serializers.ValidationError('手机号格式错误')
+        return value
 
     def validate(self, data):
+
         # 判断两次密码
         if data['password'] != data['password2']:
             raise serializers.ValidationError('两次密码不一致')
+        phone_number = data["phone_number"]
+        username = data["username"]
+        exsist_user = User.objects.filter(phone_number=phone_number, username=username)
+        if not exsist_user:
+            if User.objects.filter(phone_number=phone_number):
+                raise serializers.ValidationError('手机号已存在')
+        user = self.context["request"].user
+        if data["system_role"] == "super_user":
+            raise PermissionDenied("无法创建或修改超级管理员用户")
+        if data["system_role"] == "system_manager" and not user.is_superuser:
+            raise PermissionDenied("权限不足")
         return data
 
     def create(self, validated_data):
         """重写保存方法，增加密码加密"""
-
         # 移除数据库模型类中不存在的属性
         del validated_data['password2']
-        project_id = validated_data["project_id"]
-        del validated_data['project_id']
+        phone_number = validated_data["phone_number"]
+        username = validated_data["username"]
+        exsist_user = User.objects.filter(phone_number=phone_number, username=username)
+        if exsist_user:
+            exsist_user.is_delete = False
+            return exsist_user
         user = super().create(validated_data)
         user.set_password(validated_data['password'])
-        # Project_User.save(project_id=validated_data["project_id"], user_id=user.id)
         user.save()
-        project = Project.objects.get(pk=int(project_id))
-        user.projects.add(project)
+        return user
+
+
+class UpdateOtherUserSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(read_only=True)
+    phone_number = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = User
+        fields = ('id', 'username', "phone_number", "system_role")
+
+    def validate(self, data):
+        user = self.context["request"].user
+        operated_user_id = self.context["view"].kwargs["pk"]
+        if operated_user_id:
+            if User.objects.get(pk=operated_user_id).system_role == "super_user":
+                raise PermissionDenied("无法创建或修改超级管理员用户")
+            elif User.objects.get(pk=operated_user_id).system_role == "system_manager":
+                if not user.is_superuser:
+                    raise PermissionDenied("权限不足")
+
+        if data["system_role"] == "super_user":
+            raise PermissionDenied("无法创建或修改超级管理员用户")
+        if data["system_role"] == "system_manager" and not user.is_superuser:
+            raise PermissionDenied("权限不足")
+        return data
+
+
+class UpdateSelfSerializer(serializers.ModelSerializer):
+    system_role = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = User
+        fields = ('id', 'username', "phone_number", "system_role")
+        extra_kwargs = {
+            'username': {
+                'min_length': 3,
+                'max_length': 20,
+                'error_messages': {
+                    'min_length': '仅允许3-20个字符的用户名',
+                    'max_length': '仅允许3-20个字符的用户名',
+                }
+            }
+        }
+
+    def validate_phone_number(self, value):
+        """验证手机号"""
+        print("*****************")
+        if not re.match(r'^1[3-9]\d{9}$', value):
+            raise serializers.ValidationError('手机号格式错误')
+        return value
+
+
+class ChangePasswordSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(read_only=True)
+    new_password = serializers.CharField(write_only=True)
+    new_password2 = serializers.CharField(write_only=True)
+    system_role = serializers.CharField(read_only=True)
+    phone_number = serializers.CharField(read_only=True)
+    password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'password', 'new_password', "new_password2", "phone_number", "system_role")
+        extra_kwargs = {
+            'new_password': {
+                'write_only': True,
+                'min_length': 6,
+                'max_length': 20,
+                'error_messages': {
+                    'min_length': '仅允许6-20个字符的密码',
+                    'max_length': '仅允许6-20个字符的密码',
+                }
+            }
+        }
+
+    def validate(self, data):
+        user = self.context["request"].user
+        if not check_password(self.context["request"].get("password"), user.password):
+            raise serializers.ValidationError("密码错误")
+        # 判断两次密码
+        if data['new_password'] != data['new_password2']:
+            raise serializers.ValidationError('两次密码不一致')
+
+    def create(self, validated_data):
+        del validated_data["password"]
+        del validated_data["new_password2"]
+        # password = validated_data["password"]
+        user = super().create(validated_data)
+        user.set_password(validated_data["new_password"])
+        user.save()
         return user
 
 
@@ -124,19 +229,24 @@ class LabelSerializer(serializers.ModelSerializer):
 
 
 class SubLabelSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField()
+    text = serializers.CharField(read_only=True)
+
     class Meta:
         model = Label
-        fields = ["text"]
+        fields = ["id", "text"]
 
 
 class AnnotationSerializer(serializers.ModelSerializer):
-    prob = serializers.DecimalField(max_digits=4, decimal_places=3, max_value=1.0, min_value=0.0)
-    manual = serializers.BooleanField(write_only=True)
-    label = SubLabelSerializer(read_only=True)
+    prob = serializers.DecimalField(max_digits=4, decimal_places=3, max_value=1.0, min_value=0.0, read_only=True)
+    manual = serializers.BooleanField(read_only=True)
+    label = SubLabelSerializer()
+    annoted_by = serializers.CharField(read_only=True)
+    document = serializers.CharField(read_only=True)
 
     class Meta:
         model = Annotation
-        fields = ["id", "document_id", "prob", "user", "manual", "label", "start_offset", "end_offset"]
+        fields = ["id", "document", "prob", "manual", "label", "start_offset", "end_offset", "annoted_by"]
 
     def validate(self, attrs):
         start_offset = attrs["start_offset"]
@@ -158,11 +268,72 @@ class AnnotationSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        document = validated_data["document"]
-        if not document.is_annoteated:
-            document.is_annoteated = True
-            document.save()
-        return super().create(validated_data)
+        document_id = validated_data["document"].id
+        document = get_object_or_404(Document, pk=document_id)
+        with transaction.atomic():
+            save_id = transaction.savepoint()
+            # if not document.is_annoteated:
+            #     document.is_annoteated = True
+            #     document.save()
+            while True:
+                label_id = validated_data["label"]["id"]
+                label = get_object_or_404(Label, pk=label_id)
+                start_offset = validated_data["start_offset"]
+                end_offset = validated_data["end_offset"]
+                annoted_by = self.context["request"].user
+                annotation = Annotation.objects.filter(start_offset=start_offset, end_offset=end_offset,
+                                                    document=document).first()
+                if annotation:
+                    try:
+                        annotation.delete()
+                        annotation = Annotation.objects.create(start_offset=start_offset, end_offset=end_offset,
+                                                               document=document, label=label,
+                                                               annoted_by=annoted_by, manual=True)
+                        annotation.save()
+                        Document.objects.filter(pk=annotation.document.id).update(
+                            is_annoteated=True)
+                        document.save()
+                        return annotation
+                    except:
+                        transaction.rollback(save_id)
+                        continue
+                else:
+                    try:
+                        annotation = Annotation.objects.create(start_offset=start_offset, end_offset=end_offset,
+                                                               document_id=document.id, label=label,
+                                                               annoted_by=annoted_by, manual=True)
+                        Document.objects.filter(pk=Annotation.objects.get(pk=annotation.id).document_id).update(
+                            is_annoteated=True)
+                        return annotation
+                    except:
+                        transaction.rollback(save_id)
+                        continue
+
+            #         try:
+            #             annotation = Annotation.objects.create(start_offset=start_offset, end_offset=end_offset,
+            #                                                    document_id=document.id,
+            #                                                    annoted_by=annoted_by, manual=True)
+            #             return annotation
+            #         except Exception:
+            #             annotation = Annotation.objects.filter(start_offset=start_offset, end_offset=end_offset,
+            #                                                    document_id=document.id)
+            #             if annotation:
+            #                 result = Annotation.objects.filter(start_offset=start_offset, end_offset=end_offset,
+            #                                                    document_id=document.id,
+            #                                                    annoted_by=annotation.annoted_by).update(
+            #                     label=label,
+            #                     annoted_by=annoted_by,
+            #                     manual=True)
+            #                 if result:
+            #                     return Annotation(start_offset=start_offset, end_offset=end_offset,
+            #                                       document_id=document.id, annoted_by=annoted_by, label=label,
+            #                                       manual=True)
+            #                 else:
+            #                     transaction.rollback(save_id)
+            #             else:
+            #                 continue
+            # except:
+            #     transaction.rollback(save_id)
 
 
 class DocumentSerializer(serializers.ModelSerializer):
@@ -209,9 +380,62 @@ class DocumentSerializer(serializers.ModelSerializer):
 
 
 class ProjectSerializer(serializers.ModelSerializer):
-    # documents = DocumentSerializer(many=True, read_only=True)
     count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Project
-        fields = ('id', "owner", 'name', "description", "project_type", "randomize_document_order", "count")
+        fields = ('id', 'name', "description", "project_type", "randomize_document_order", "count")
+
+
+class SubProjectSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField(read_only=True)
+    description = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = Project
+        fields = ["id", "name", "description"]
+
+
+class SubUserSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField()
+    username = serializers.CharField(read_only=True)
+    phone_number = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "phone_number"]
+
+
+class ProjectUserSerializer(serializers.ModelSerializer):
+    project = SubProjectSerializer()
+    user = SubUserSerializer()
+
+    class Meta:
+        model = ProjectUser
+        fields = ('id', 'user', "project", "role")
+
+    def validate(self, attrs):
+        project_id = attrs["project"]["id"]
+        role = attrs["role"]
+        user = self.context["request"].user
+        if user.is_superuser or user.system_role == "system_manager":
+            return attrs
+        user_id = self.context["request"].user.id
+        project_user = ProjectUser.objects.get(project_id=project_id, user_id=user_id)
+        if project_user:
+            if project_user.role == "project_owner" and role == "ordinary_user":
+                return attrs
+            raise serializers.ValidationError("无操作权限")
+        else:
+            raise serializers.ValidationError("无操作权限")
+
+    def create(self, validated_data):
+        project_id = validated_data["project"]["id"]
+        project = get_object_or_404(Project, pk=project_id)
+        operated_user_id = validated_data["user"]["id"]
+        operated_user = get_object_or_404(User, pk=operated_user_id)
+        role = validated_data["role"]
+        project_user = ProjectUser.objects.create(project=project, user=operated_user, role=role)
+        project_user.save()
+        return project_user
