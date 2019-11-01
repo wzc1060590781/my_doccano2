@@ -1,25 +1,16 @@
-import random
 
-from django.contrib.auth import authenticate
-from django.contrib.auth.views import PasswordResetView
 from django.db import transaction
-from django.http import JsonResponse, HttpResponseForbidden, Http404
-from django.shortcuts import render, get_object_or_404, redirect
-
-from rest_framework import request, mixins, status
+from django.http import Http404
+from django.shortcuts import get_object_or_404
+from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.generics import CreateAPIView, GenericAPIView, ListAPIView, UpdateAPIView, DestroyAPIView, \
-    RetrieveAPIView, ListCreateAPIView
-from rest_framework.mixins import CreateModelMixin, ListModelMixin
+from rest_framework.generics import  GenericAPIView
+from rest_framework.mixins import CreateModelMixin
 from rest_framework.permissions import IsAuthenticated
-
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.viewsets import ModelViewSet
-
 from app.utils.Viewset import ApiModelViewSet
-
-from .models import User, Project, Document, ProjectUser, Annotation
+from .models import User, Project, Document, ProjectUser
 from . import serializers
 from .permissions import ProjectOperationPermission, DocumentOperationPermission, UserOperationPermission, \
     LabelOperationPermission, AnnotationOperationPermission, ProjectUserPermission
@@ -56,32 +47,6 @@ class UserView(ApiModelViewSet):
 class ChangePasswordView(CreateModelMixin, GenericAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = serializers.ChangePasswordSerializer
-
-
-# class LoginView(GenericAPIView):
-#     # def get(self, request, *args, **kwargs):
-#     #     return Response({"message": "欢迎进入登录页面"})
-#
-#     def post(self, request, *args, **kwargs):
-#         try:
-#             username = request.data["username"]
-#         except:
-#             return Response({"message": "请求失败", "status": status.HTTP_400_BAD_REQUEST, "success": False},
-#                             status=status.HTTP_400_BAD_REQUEST)
-#         try:
-#             password = request.data["password"]
-#         except:
-#             return Response({"message": "请求失败", "status": status.HTTP_400_BAD_REQUEST, "success": False},
-#                             status=status.HTTP_400_BAD_REQUEST)
-#         user = authenticate(username=username, password=password)
-#         if user:
-#             print("登录成功")
-#             return Response({"id": user.id, "username": user.username, "message": "请求成功", "status": status.HTTP_200_OK,
-#                              "success": True})
-#         # TODO
-#         return Response({"message": "请求失败", "status": status.HTTP_400_BAD_REQUEST, "success": False},
-#                         status=status.HTTP_400_BAD_REQUEST)
-
 
 # url(r'^projects/(?P<pk>\d+)/$', views.ProjectListView.as_view()),
 # 创建项目，项目列表
@@ -242,15 +207,15 @@ class StatisticView(APIView):
         return Response(data=data, status=status.HTTP_200_OK)
 
 
-class MyException(ModelViewSet):
-    def create(self, request, *args, **kwargs):
-        return Response({"message": "路径错误", "success": False, "status": 404})
-
-    def retrieve(self, request, *args, **kwargs):
-        return Response({"message": "路径错误", "success": False, "status": 404})
-
-    def update(self, request, *args, **kwargs):
-        return Response({"message": "路径错误", "success": False, "status": 404})
-
-    def destroy(self, request, *args, **kwargs):
-        return Response({"message": "路径错误", "success": False, "status": 404})
+# class MyException(ModelViewSet):
+#     def create(self, request, *args, **kwargs):
+#         return Response({"message": "路径错误", "success": False, "status": 404})
+#
+#     def retrieve(self, request, *args, **kwargs):
+#         return Response({"message": "路径错误", "success": False, "status": 404})
+#
+#     def update(self, request, *args, **kwargs):
+#         return Response({"message": "路径错误", "success": False, "status": 404})
+#
+#     def destroy(self, request, *args, **kwargs):
+#         return Response({"message": "路径错误", "success": False, "status": 404})

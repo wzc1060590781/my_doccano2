@@ -6,7 +6,6 @@ urlpatterns = [
     url(r'^users/$', views.UserView.as_view({'get': 'list', 'post': 'create'})),
     url(r'^users/(?P<pk>\d+)$',
         views.UserView.as_view({'get': 'retrieve', 'put': 'update', "patch": "update", 'delete': 'destroy'})),
-    # url(r'^usernames/(?P<username>\w{5,20})/count$', views.UsernameCountView.as_view()),
     url(r'^authorizations/$', obtain_jwt_token),
     url(r'^projects/$', views.ProjectView.as_view({'get': 'list', 'post': 'create'})),
     url(r'^projects/(?P<pk>\d+)$',
@@ -28,6 +27,6 @@ urlpatterns = [
         views.ProjectUserView.as_view({'get': 'retrieve', 'put': 'update', "patch": "update", 'delete': 'destroy'})),
     url(r"^password",
         views.ChangePasswordView.as_view()),
-    url(r"^.*",
-        views.MyException.as_view({'get': 'retrieve', 'put': 'update', "patch": "update", 'delete': 'destroy'}))
+    # url(r"^.*",
+    #     views.MyException.as_view({'get': 'retrieve', 'put': 'update', "patch": "update", 'delete': 'destroy'}))
 ]
