@@ -25,8 +25,6 @@ urlpatterns = [
         views.ProjectUserView.as_view({'get': 'list', 'post': 'create'})),
     url(r"^project_user_relations/(?P<pk>\d+)$",
         views.ProjectUserView.as_view({'get': 'retrieve', 'put': 'update', "patch": "update", 'delete': 'destroy'})),
-    url(r"^password",
+    url(r"^users/(?P<pk>\d+)/password",
         views.ChangePasswordView.as_view()),
-    # url(r"^.*",
-    #     views.MyException.as_view({'get': 'retrieve', 'put': 'update', "patch": "update", 'delete': 'destroy'}))
 ]

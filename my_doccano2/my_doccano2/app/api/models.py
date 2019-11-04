@@ -11,11 +11,13 @@ PROJECT_CHOICES = (
     (SEQUENCE_LABELING, 'sequence labeling'),
     (SEQ2SEQ, 'sequence to sequence'),
 )
-SYSTEM_ROLE_CHOICE = (
-    ("ordinary_user", "ordinary_user"),
-    ("system_manager", "system_manager"),
-    ("super_user", "super_user")
-)
+
+
+# SYSTEM_ROLE_CHOICE = (
+#     ("ordinary_user", "ordinary_user"),
+#     ("system_manager", "system_manager"),
+#     ("super_user", "super_user")
+# )
 
 
 class BaseModel(models.Model):
@@ -31,7 +33,8 @@ class User(AbstractUser):
     #                           verbose_name="角色", help_text="角色")
     phone_number = models.CharField(max_length=11, null=True, verbose_name="手机号")
     is_delete = models.BooleanField(default=False)
-    system_role = models.CharField(max_length=30, choices=SYSTEM_ROLE_CHOICE, help_text="系统角色", null=True, blank=True)
+
+    # system_role = models.CharField(max_length=30, choices=SYSTEM_ROLE_CHOICE, help_text="系统角色", null=True, blank=True)
 
     def __str__(self):
         return self.username
@@ -46,13 +49,13 @@ class User(AbstractUser):
         verbose_name_plural = verbose_name
 
 
-class UserManager(UserManager):
-    def create_superuser(self, username, email, password, **extra_fields):
-        user = super().create_superuser(username, email, password, **extra_fields)
-        user.system_role = "super_user"
-        # group = Group.objects.get(pk=1)
-        # group.user_set.add(user)
-        return user
+# class UserManager(UserManager):
+#     def create_superuser(self, username, email, password, **extra_fields):
+#         user = super().create_superuser(username, email, password, **extra_fields)
+#         user.system_role = "super_user"
+#         # group = Group.objects.get(pk=1)
+#         # group.user_set.add(user)
+#         return user
 
 
 class Project(BaseModel):
@@ -71,16 +74,18 @@ class Project(BaseModel):
         verbose_name = "项目表"
 
 
+Roles = (
+    ('project_owner', 'project_owner'),
+    ('user', 'user')
+)
+
+
 class ProjectUser(BaseModel):
-    Roles = (
-        ('project_owner', 'project_owner'),
-        ('user', 'user')
-    )
     project = models.ForeignKey(Project, on_delete=models.CASCADE,
                                 help_text="项目")
     user = models.ForeignKey(User, on_delete=models.CASCADE, help_text="用户")
     # TODO
-    role = models.CharField(max_length=20, blank=False, null=False, choices=Roles)
+    role = models.CharField(max_length=20, blank=True, null=False, choices=Roles, default="user")
 
     class Meta:
         db_table = "project_user_relationship"
@@ -121,7 +126,7 @@ class Annotation(BaseModel):
                                    verbose_name="打标签者")
     manual = models.BooleanField(default=False)
     # 所用标记
-    label = models.ForeignKey("Label", related_name="annotations", on_delete=models.SET_NULL, null=True,
+    label = models.ForeignKey("Label", related_name="annotations", on_delete=models.CASCADE, null=True,
                               verbose_name="标记")
     # 文档中的开始位置
     start_offset = models.IntegerField(verbose_name="标记开始下标")
@@ -169,7 +174,7 @@ class algorithm(BaseModel):
     mini_quantity = models.IntegerField(null=False, verbose_name="最小训练集")
     code_url = models.CharField(max_length=255, null=False, unique=True, verbose_name="算法代码路径")
     model_url = models.CharField(max_length=255, null=False, unique=True, verbose_name="算法模型路径")
-    description = models.TextField(default="",verbose_name="算法描述")
+    description = models.TextField(default="", verbose_name="算法描述")
 
     def __str__(self):
         return self.name

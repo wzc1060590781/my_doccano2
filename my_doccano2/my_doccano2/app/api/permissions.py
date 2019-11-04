@@ -38,12 +38,15 @@ class ProjectOperationPermission(BasePermission):
 
 class UserOperationPermission(BasePermission):
     def has_permission(self, request, view):
+        opereated_user_id = view.kwargs.get('pk') or request.query_params.get('user_id')
+        opereated_user = get_object_or_404(User, pk=opereated_user_id)
         if request.method in SAFE_METHODS:
             return True
+        if opereated_user.is_superuser:
+            return False
         user_id = request.user.id
-        if request.user.is_superuser or request.user.system_role == "system_manager":
+        if request.user.is_superuser:
             return True
-        opereated_user_id = view.kwargs.get('pk') or request.query_params.get('user_id')
         if request.method in CHANGE_METHODS:
             if str(user_id) == opereated_user_id:
                 return True
@@ -81,16 +84,19 @@ class LabelOperationPermission(BasePermission):
     def has_permission(self, request, view):
         user_id = request.user.id
         self.user_id = user_id
-        project_id = view.kwargs.get('project_id') or request.query_params.get('project_id')
-        # label_id = view.kwargs.get('pk') or view.kwargs.get('label_id') or request.query_params.get('label_id')
-        if request.method in CHANGE_METHODS:
-            return False
         if request.user.is_superuser:
             return True
+        project_id = view.kwargs.get('project_id') or request.query_params.get('project_id')
         project = get_object_or_404(Project, pk=project_id)
-        if request.user in project.users.all() and ProjectUser.objects.get(
-                project_id=project_id, user_id=user_id).role == "project_owner":
-            return True
+        if request.user in project.users.all():
+            if request.method in CHANGE_METHODS:
+                if ProjectUser.objects.get(project_id=project_id, user_id=user_id).role == "project_owner":
+                    return True
+                return False
+            elif request.method in SAFE_METHODS:
+                return True
+            else:
+                return False
         else:
             return False
 
@@ -114,7 +120,7 @@ class AnnotationOperationPermission(BasePermission):
 
 class ProjectUserPermission(BasePermission):
     def has_permission(self, request, view):
-        if request.user.is_superuser or request.user.system_role == "system_manager":
+        if request.user.is_superuser:
             return True
         if request.method in SAFE_METHODS:
             return True

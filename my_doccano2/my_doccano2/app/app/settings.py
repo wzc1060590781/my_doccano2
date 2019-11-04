@@ -137,7 +137,7 @@ JWT_AUTH = {
     'JWT_RESPONSE_PAYLOAD_HANDLER': 'app.utils.jwt_handler.jwt_response_payload_handler',
     'JWT_AUTH_HEADER_PREFIX': 'JWT'
 }
-AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend',)
+# AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend',)
 
 TIME_ZONE = 'Asia/Shanghai'
 
@@ -147,9 +147,6 @@ USE_L10N = True
 
 # USE_TZ = True
 USE_TZ = False
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/2.0/howto/static-files/
 
 STATIC_URL = '/static/'
 STATICFILES_DIRS = (

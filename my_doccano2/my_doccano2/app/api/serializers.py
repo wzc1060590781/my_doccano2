@@ -1,15 +1,15 @@
 import json
 import re
 
-from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password
-from django.contrib.auth.models import Group
-from django.db import transaction, DatabaseError
+
+from django.db import transaction
 from django.db.models import Q
-from django.http import Http404
+
 from rest_framework import serializers
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
+from rest_framework_jwt.settings import api_settings
 
 from .models import User, Project, ProjectUser, Document, Label, Annotation
 
@@ -18,10 +18,11 @@ class CreateUserSerializer(serializers.ModelSerializer):
     """创建用户的序列化器"""
     password2 = serializers.CharField(label='确认密码', write_only=True)
     phone_number = serializers.CharField(label="手机号")
+    token = serializers.CharField(label='JWT token', read_only=True)
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'password', 'password2', "phone_number", "system_role")
+        fields = ('id', 'username', 'password', 'password2', "phone_number", "token")
         extra_kwargs = {
             'username': {
                 'min_length': 3,
@@ -60,11 +61,6 @@ class CreateUserSerializer(serializers.ModelSerializer):
         if not exsist_user:
             if User.objects.filter(phone_number=phone_number):
                 raise serializers.ValidationError('手机号已存在')
-        user = self.context["request"].user
-        if data["system_role"] == "super_user":
-            raise PermissionDenied("无法创建或修改超级管理员用户")
-        if data["system_role"] == "system_manager" and not user.is_superuser:
-            raise PermissionDenied("权限不足")
         return data
 
     def create(self, validated_data):
@@ -80,40 +76,41 @@ class CreateUserSerializer(serializers.ModelSerializer):
         user = super().create(validated_data)
         user.set_password(validated_data['password'])
         user.save()
+        # 签发jwt token
+        jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
+        jwt_encode_handler = api_settings.JWT_ENCODE_HANDLER
+
+        payload = jwt_payload_handler(user)
+        token = jwt_encode_handler(payload)
+
+        user.token = token
         return user
 
 
-class UpdateOtherUserSerializer(serializers.ModelSerializer):
-    username = serializers.CharField(read_only=True)
-    phone_number = serializers.CharField(read_only=True)
-
-    class Meta:
-        model = User
-        fields = ('id', 'username', "phone_number", "system_role")
-
-    def validate(self, data):
-        user = self.context["request"].user
-        operated_user_id = self.context["view"].kwargs["pk"]
-        if operated_user_id:
-            if User.objects.get(pk=operated_user_id).system_role == "super_user":
-                raise PermissionDenied("无法创建或修改超级管理员用户")
-            elif User.objects.get(pk=operated_user_id).system_role == "system_manager":
-                if not user.is_superuser:
-                    raise PermissionDenied("权限不足")
-
-        if data["system_role"] == "super_user":
-            raise PermissionDenied("无法创建或修改超级管理员用户")
-        if data["system_role"] == "system_manager" and not user.is_superuser:
-            raise PermissionDenied("权限不足")
-        return data
+# class UpdateOtherUserSerializer(serializers.ModelSerializer):
+#     username = serializers.CharField(read_only=True)
+#     phone_number = serializers.CharField(read_only=True)
+#
+#     class Meta:
+#         model = User
+#         fields = ('id', 'username', "phone_number")
+#
+#     def validate(self, data):
+#         # user = self.context["request"].user
+#         operated_user_id = self.context["view"].kwargs["pk"]
+#         if operated_user_id:
+#             if User.objects.get(pk=operated_user_id).system_role == "super_user":
+#                 raise PermissionDenied("无法创建或修改超级管理员用户")
+#             else:
+#                 return data
+#         else:
+#             return data
 
 
 class UpdateSelfSerializer(serializers.ModelSerializer):
-    system_role = serializers.CharField(read_only=True)
-
     class Meta:
         model = User
-        fields = ('id', 'username', "phone_number", "system_role")
+        fields = ('id', 'username', "phone_number")
         extra_kwargs = {
             'username': {
                 'min_length': 3,
@@ -137,13 +134,12 @@ class ChangePasswordSerializer(serializers.ModelSerializer):
     username = serializers.CharField(read_only=True)
     new_password = serializers.CharField(write_only=True)
     new_password2 = serializers.CharField(write_only=True)
-    system_role = serializers.CharField(read_only=True)
     phone_number = serializers.CharField(read_only=True)
     password = serializers.CharField(write_only=True)
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'password', 'new_password', "new_password2", "phone_number", "system_role")
+        fields = ('id', 'username', 'password', 'new_password', "new_password2", "phone_number")
         extra_kwargs = {
             'new_password': {
                 'write_only': True,
@@ -158,7 +154,7 @@ class ChangePasswordSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         user = self.context["request"].user
-        if not check_password(self.context["request"].get("password"), user.password):
+        if not check_password(self.context["request"].data["password"], user.password):
             raise serializers.ValidationError("密码错误")
         # 判断两次密码
         if data['new_password'] != data['new_password2']:
@@ -282,7 +278,7 @@ class AnnotationSerializer(serializers.ModelSerializer):
                 end_offset = validated_data["end_offset"]
                 annoted_by = self.context["request"].user
                 annotation = Annotation.objects.filter(start_offset=start_offset, end_offset=end_offset,
-                                                    document=document).first()
+                                                       document=document).first()
                 if annotation:
                     try:
                         annotation.delete()
@@ -407,9 +403,15 @@ class SubUserSerializer(serializers.ModelSerializer):
         fields = ["id", "username", "phone_number"]
 
 
+# class CreateProjectUserSerializer(serializers.ModelSerializer):
+#     project = serializers.IntegerField()
+#     user =serializers.IntegerField()
+#     role =
+
 class ProjectUserSerializer(serializers.ModelSerializer):
     project = SubProjectSerializer()
     user = SubUserSerializer()
+    role = serializers.CharField()
 
     class Meta:
         model = ProjectUser
@@ -417,18 +419,20 @@ class ProjectUserSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         project_id = attrs["project"]["id"]
+        operated_user_id = attrs["user"]["id"]
         role = attrs["role"]
         user = self.context["request"].user
-        if user.is_superuser or user.system_role == "system_manager":
+        if user.is_superuser:
             return attrs
         user_id = self.context["request"].user.id
+        operated_project_user = ProjectUser.objects.get(project_id=project_id, user_id=operated_user_id)
         project_user = ProjectUser.objects.get(project_id=project_id, user_id=user_id)
-        if project_user:
-            if project_user.role == "project_owner" and role == "ordinary_user":
-                return attrs
-            raise serializers.ValidationError("无操作权限")
+        if operated_project_user:
+            raise PermissionDenied("无操作权限")
+        if project_user.role == "project_owner" and role == "user":
+            return attrs
         else:
-            raise serializers.ValidationError("无操作权限")
+            raise PermissionDenied("无操作权限")
 
     def create(self, validated_data):
         project_id = validated_data["project"]["id"]

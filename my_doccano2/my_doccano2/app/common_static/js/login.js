@@ -38,9 +38,12 @@ var vm = new Vue({
         // 表单提交
         on_submit: function(){
 //            this.check_username();
-            this.check_pwd();
-
+//            this.check_pwd();
             if (this.error_username == false && this.error_pwd == false) {
+//                 axios({
+//                    method : "post",
+//                    url:this.host+'/authorizations/',
+//                })
                 axios.post(this.host+'/authorizations/', {
                         username: this.username,
                         password: this.password,
@@ -52,6 +55,7 @@ var vm = new Vue({
                         // 使用浏览器本地存储保存token
                         if (this.remember) {
                             // 记住登录
+                            alert(response)
                             sessionStorage.clear();
                             localStorage.token = response.data.token;
                             localStorage.user_id = response.data.user_id;
@@ -59,19 +63,22 @@ var vm = new Vue({
                         } else {
                             // 未记住登录
                             localStorage.clear();
-                            sessionStorage.token = response.data.token;
-                            sessionStorage.user_id = response.data.user_id;
-                            sessionStorage.username = response.data.username;
+                            sessionStorage.token = response.data.data.token;
+//                            alert(response.data.data.token)
+                            sessionStorage.user_id = response.data.data.user_id;
+                            sessionStorage.username = response.data.data.username;
+
                         }
 
                         // 跳转页面
                         var return_url = this.get_query_string('next');
                         if (!return_url) {
-                            return_url = '/static/index.html';
+                            return_url = '/static/user_center_info.html';
                         }
                         location.href = return_url;
                     })
                     .catch(error => {
+                        alert(888)
                         if (error.response.status == 400) {
                             this.error_pwd_message = '用户名或密码错误';
                         } else {

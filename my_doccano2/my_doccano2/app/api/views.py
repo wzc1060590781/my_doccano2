@@ -1,10 +1,9 @@
-
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.generics import  GenericAPIView
+from rest_framework.generics import GenericAPIView, CreateAPIView
 from rest_framework.mixins import CreateModelMixin
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -21,15 +20,14 @@ class UserView(ApiModelViewSet):
     list:
     返回用户列表
     """
-    permission_classes = [IsAuthenticated, UserOperationPermission]
-
+    # permission_classes = [IsAuthenticated, UserOperationPermission]
+    serializer_class = serializers.CreateUserSerializer
     queryset = User.objects.filter(is_delete=False)
+    filter_fields = ("username",)
 
     def get_serializer_class(self):
         if self.action == "update":
-            if self.kwargs["pk"] == str(self.request.user.id):
-                return serializers.UpdateSelfSerializer
-            return serializers.UpdateOtherUserSerializer
+            return serializers.UpdateSelfSerializer
         else:
             return serializers.CreateUserSerializer
 
@@ -38,27 +36,35 @@ class UserView(ApiModelViewSet):
         print(instance.is_superuser)
         if instance.is_superuser:
             raise PermissionDenied("不可删除超级管理员")
-        elif instance.system_role == "system_manager" and not request.user.is_superuser:
-            raise PermissionDenied("权限不足")
         instance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class ChangePasswordView(CreateModelMixin, GenericAPIView):
-    permission_classes = [IsAuthenticated]
+class ChangePasswordView(CreateAPIView):
+    # permission_classes = [IsAuthenticated]
     serializer_class = serializers.ChangePasswordSerializer
+
+    # def create(self, request, *args, **kwargs):
+    #     user = get_object_or_404(User, pk=self.kwargs['pk'])
+    #     if user.id == request.user.id:
+    #         return super().create(request,*args,**kwargs)
+    #     else:
+    #         raise PermissionDenied("没有权限修改其他用户密码")
+
 
 # url(r'^projects/(?P<pk>\d+)/$', views.ProjectListView.as_view()),
 # 创建项目，项目列表
 class ProjectView(ApiModelViewSet):
     serializer_class = serializers.ProjectSerializer
-    permission_classes = [IsAuthenticated, ProjectOperationPermission]
+    # permission_classes = [IsAuthenticated, ProjectOperationPermission]
 
     def get_queryset(self):
-        user = self.request.user
-        if user.is_superuser:
-            return Project.objects.all()
-        return user.project_set.all()
+        # user = self.request.user
+        # if user.is_superuser:
+        #     return Project.objects.all()
+        # return user.project_set.all()
+
+        return Project.objects.all()
 
     def get(self, request, pk, *args, **kwargs):
         response = super().get(request, pk, *args, **kwargs)
@@ -69,16 +75,19 @@ class ProjectView(ApiModelViewSet):
 # projects/(?P<project_id>\d+)/docs/
 # 上传文件和查看文件列表
 class DocView(ApiModelViewSet):
-    permission_classes = [IsAuthenticated, DocumentOperationPermission]
+    # permission_classes = [IsAuthenticated, DocumentOperationPermission]
     serializer_class = serializers.DocumentSerializer
     filter_fields = ("is_annoteated",)
-    ordering_fields = ('-id')
+    ordering_fields = ('id')
 
     def get_queryset(self):
         project = get_object_or_404(Project, pk=self.kwargs['project_id'])
         if project in self.request.user.project_set.all():
             qs = project.documents.all().filter(is_delete=False)
-            return qs
+            if project.randomize_document_order:
+                return qs.order_by("?")
+            else:
+                return qs
         else:
             raise PermissionDenied
 
@@ -115,7 +124,7 @@ class DocView(ApiModelViewSet):
 
 
 class LabelView(ApiModelViewSet):
-    permission_classes = [IsAuthenticated, LabelOperationPermission]
+    # permission_classes = [IsAuthenticated, LabelOperationPermission]
     serializer_class = serializers.LabelSerializer
 
     def get_queryset(self):
@@ -135,6 +144,7 @@ class LabelView(ApiModelViewSet):
 
 class AnnotationView(ApiModelViewSet):
     serializer_class = serializers.AnnotationSerializer
+
     permission_classes = [IsAuthenticated, AnnotationOperationPermission]
 
     def get_queryset(self):
@@ -182,7 +192,8 @@ class AnnotationView(ApiModelViewSet):
 class ProjectUserView(ApiModelViewSet):
     serializer_class = serializers.ProjectUserSerializer
     queryset = ProjectUser.objects.all()
-    permission_classes = [IsAuthenticated, ProjectUserPermission]
+
+    # permission_classes = [IsAuthenticated, ProjectUserPermission]
 
     def destroy(self, request, *args, **kwargs):
         instance = get_object_or_404(ProjectUser, pk=self.kwargs['pk'])
@@ -205,7 +216,6 @@ class StatisticView(APIView):
         data["total"] = project.documents.all().count()
         data["remaining"] = project.documents.filter(is_annoteated=False).count()
         return Response(data=data, status=status.HTTP_200_OK)
-
 
 # class MyException(ModelViewSet):
 #     def create(self, request, *args, **kwargs):
