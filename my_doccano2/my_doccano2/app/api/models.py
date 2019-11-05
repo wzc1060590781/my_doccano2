@@ -73,6 +73,9 @@ class Project(BaseModel):
         db_table = "projects"
         verbose_name = "项目表"
 
+    def __str__(self):
+        return self.name
+
 
 Roles = (
     ('project_owner', 'project_owner'),

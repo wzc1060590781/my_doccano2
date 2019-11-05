@@ -171,9 +171,10 @@ class ChangePasswordSerializer(serializers.ModelSerializer):
 
 
 class LabelSerializer(serializers.ModelSerializer):
+    project = serializers.StringRelatedField(read_only=True)
     class Meta:
         model = Label
-        fields = ["id", "text", "background_color", "text_color", "project_id", "prefix_key", "suffix_key"]
+        fields = ["id", "text", "background_color", "text_color", "project", "prefix_key", "suffix_key"]
 
         extra_kwargs = {
             'background_color': {
@@ -217,7 +218,11 @@ class LabelSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("文字颜色和背景颜色不能一样")
         project_id = self.context["view"].kwargs["project_id"]
         labels_queryset = Label.objects.filter(project_id=project_id)
-        if labels_queryset.filter(Q(text=text) | Q(background_color=background_color)).count() != 0:
+        pk = self.context["view"].kwargs.get("pk")
+        count = 0
+        if pk:
+            count = 1
+        if labels_queryset.filter(Q(text=text) | Q(background_color=background_color)).count() != count:
             raise serializers.ValidationError("项目中已存在该标签或已存在该颜色标签")
         project = Project.objects.get(pk=int(project_id))
         attrs["project"] = project
@@ -236,13 +241,14 @@ class SubLabelSerializer(serializers.ModelSerializer):
 class AnnotationSerializer(serializers.ModelSerializer):
     prob = serializers.DecimalField(max_digits=4, decimal_places=3, max_value=1.0, min_value=0.0, read_only=True)
     manual = serializers.BooleanField(read_only=True)
-    label = SubLabelSerializer()
+    label = SubLabelSerializer(read_only=True)
+    label_id = serializers.IntegerField(write_only=True)
     annoted_by = serializers.CharField(read_only=True)
     document = serializers.CharField(read_only=True)
 
     class Meta:
         model = Annotation
-        fields = ["id", "document", "prob", "manual", "label", "start_offset", "end_offset", "annoted_by"]
+        fields = ["id", "document", "prob", "manual", "label", "start_offset", "end_offset", "annoted_by","label_id"]
 
     def validate(self, attrs):
         start_offset = attrs["start_offset"]
@@ -268,12 +274,9 @@ class AnnotationSerializer(serializers.ModelSerializer):
         document = get_object_or_404(Document, pk=document_id)
         with transaction.atomic():
             save_id = transaction.savepoint()
-            # if not document.is_annoteated:
-            #     document.is_annoteated = True
-            #     document.save()
             while True:
-                label_id = validated_data["label"]["id"]
-                label = get_object_or_404(Label, pk=label_id)
+                label_id = validated_data["label_id"]
+                label = get_object_or_404(Label, pk=int(label_id))
                 start_offset = validated_data["start_offset"]
                 end_offset = validated_data["end_offset"]
                 annoted_by = self.context["request"].user
@@ -384,7 +387,7 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 
 class SubProjectSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField()
+    # id = serializers.IntegerField()
     name = serializers.CharField(read_only=True)
     description = serializers.CharField(read_only=True)
 
@@ -394,7 +397,6 @@ class SubProjectSerializer(serializers.ModelSerializer):
 
 
 class SubUserSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField()
     username = serializers.CharField(read_only=True)
     phone_number = serializers.CharField(read_only=True)
 
@@ -403,23 +405,20 @@ class SubUserSerializer(serializers.ModelSerializer):
         fields = ["id", "username", "phone_number"]
 
 
-# class CreateProjectUserSerializer(serializers.ModelSerializer):
-#     project = serializers.IntegerField()
-#     user =serializers.IntegerField()
-#     role =
-
 class ProjectUserSerializer(serializers.ModelSerializer):
-    project = SubProjectSerializer()
-    user = SubUserSerializer()
+    project = SubProjectSerializer(read_only=True)
+    project_id = serializers.IntegerField(write_only=True)
+    user_id = serializers.IntegerField(write_only=True)
+    user = SubUserSerializer(read_only=True)
     role = serializers.CharField()
 
     class Meta:
         model = ProjectUser
-        fields = ('id', 'user', "project", "role")
+        fields = ("id", 'user', "user_id", "project", "project_id", "role")
 
     def validate(self, attrs):
-        project_id = attrs["project"]["id"]
-        operated_user_id = attrs["user"]["id"]
+        project_id = self.context["view"].kwargs["project_id"] or attrs["project_id"]
+        operated_user_id = self.context["view"].kwargs["pk"] or attrs["user_id"]
         role = attrs["role"]
         user = self.context["request"].user
         if user.is_superuser:
@@ -428,18 +427,77 @@ class ProjectUserSerializer(serializers.ModelSerializer):
         operated_project_user = ProjectUser.objects.get(project_id=project_id, user_id=operated_user_id)
         project_user = ProjectUser.objects.get(project_id=project_id, user_id=user_id)
         if operated_project_user:
-            raise PermissionDenied("无操作权限")
+            raise PermissionDenied("该用户存在于该项目")
         if project_user.role == "project_owner" and role == "user":
             return attrs
         else:
             raise PermissionDenied("无操作权限")
 
     def create(self, validated_data):
-        project_id = validated_data["project"]["id"]
+        project_id = validated_data["project_id"]
         project = get_object_or_404(Project, pk=project_id)
-        operated_user_id = validated_data["user"]["id"]
+        operated_user_id = validated_data["user_id"]
         operated_user = get_object_or_404(User, pk=operated_user_id)
         role = validated_data["role"]
-        project_user = ProjectUser.objects.create(project=project, user=operated_user, role=role)
+        project_user = ProjectUser(project=project, user=operated_user, role=role)
         project_user.save()
         return project_user
+
+class UsersInProjectSerializer(serializers.ModelSerializer):
+    user = SubUserSerializer(read_only=True)
+    user_id = serializers.IntegerField(write_only=True)
+    project = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = ProjectUser
+        fields = ("user", "role", "project", "user_id")
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+        user = User.objects.get(pk=user.id)
+        project_id = self.context["view"].kwargs["project_id"]
+        project = get_object_or_404(Project, pk=project_id)
+        operated_user_id = attrs["user_id"]
+        operated_user = get_object_or_404(User, pk=operated_user_id)
+        role = attrs["role"]
+        attrs["project"] = project
+        attrs["user"] = operated_user
+        if user.is_superuser:
+            return attrs
+        else:
+            project_user = ProjectUser.objects.get(user=user, project=project)
+            if project_user.role == "project_owner" and role == "user":
+                return attrs
+            else:
+                raise PermissionDenied("权限不足")
+
+
+class UpdateProjectRoleSerializer(serializers.ModelSerializer):
+    user = SubUserSerializer(read_only=True)
+    project = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = ProjectUser
+        fields = ("user", "role", "project")
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+        user = User.objects.get(pk=user.id)
+        project_id = self.context["view"].kwargs["project_id"]
+        project = get_object_or_404(Project, pk=project_id)
+        operated_user_id = self.context["view"].kwargs["pk"] or attrs["user_id"]
+        operated_user = get_object_or_404(User, pk=operated_user_id)
+        attrs["project"] = project
+        attrs["user"] = operated_user
+        if user.is_superuser:
+            return attrs
+        else:
+            raise PermissionDenied("权限不足")
+
+    # def update(self, instance, validated_data):
+    #     project = validated_data["project"]
+    #     user = validated_data["user"]
+    #     project_user = ProjectUser.objects.get(project=project,user=user)
+    #     project_user.role = validated_data["role"]
+    #     project_user.save()
+    #     return project_user

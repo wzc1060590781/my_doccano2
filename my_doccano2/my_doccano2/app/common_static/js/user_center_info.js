@@ -35,7 +35,7 @@ var vm = new Vue({
 //                    this.email_active = response.data.data.email_active;
 
                     // 补充请求浏览历史
-                    axios.get(this.host + '/projects/', {
+                    axios.get(this.host + '/projects/1/docs', {
                             headers: {
                                 'Authorization': 'JWT ' + this.token
                             },
@@ -43,8 +43,6 @@ var vm = new Vue({
                         })
                         .then(response => {
                             this.projects = response.data.data.results;
-                            alert("projects")
-                            alert(response.data.data.results)
                             for(var i=0; i<this.projects.length; i++){
                                 this.projects[i].url = '/projects/' + this.projects[i].id + '.html';
                             }

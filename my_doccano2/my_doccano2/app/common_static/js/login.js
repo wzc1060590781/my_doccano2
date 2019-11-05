@@ -75,7 +75,7 @@ var vm = new Vue({
                         if (!return_url) {
                             return_url = '/static/user_center_info.html';
                         }
-                        location.href = return_url;
+//                        location.href = return_url;
                     })
                     .catch(error => {
                         alert(888)

@@ -60,12 +60,10 @@ class DocumentOperationPermission(BasePermission):
     """
     项目管理员可添加删除文本
     """
-
     def has_permission(self, request, view):
         user_id = request.user.id
         self.user_id = user_id
         project_id = view.kwargs.get('project_id') or request.query_params.get('project_id')
-        # document_id = view.kwargs.get('pk') or view.kwargs.get('doc_id') or request.query_params.get('doc_id')
         if request.method in CHANGE_METHODS:
             return False
         if request.method in SAFE_METHODS:

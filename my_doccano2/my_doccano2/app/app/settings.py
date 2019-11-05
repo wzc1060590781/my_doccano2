@@ -135,7 +135,7 @@ REST_FRAMEWORK = {
 JWT_AUTH = {
     'JWT_EXPIRATION_DELTA': datetime.timedelta(days=1),  # 有效期
     'JWT_RESPONSE_PAYLOAD_HANDLER': 'app.utils.jwt_handler.jwt_response_payload_handler',
-    'JWT_AUTH_HEADER_PREFIX': 'JWT'
+    # 'JWT_AUTH_HEADER_PREFIX': 'JWT '
 }
 # AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend',)
 

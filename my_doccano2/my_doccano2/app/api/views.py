@@ -20,7 +20,7 @@ class UserView(ApiModelViewSet):
     list:
     返回用户列表
     """
-    # permission_classes = [IsAuthenticated, UserOperationPermission]
+    permission_classes = [IsAuthenticated, UserOperationPermission]
     serializer_class = serializers.CreateUserSerializer
     queryset = User.objects.filter(is_delete=False)
     filter_fields = ("username",)
@@ -33,7 +33,6 @@ class UserView(ApiModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = get_object_or_404(User, pk=self.kwargs['pk'])
-        print(instance.is_superuser)
         if instance.is_superuser:
             raise PermissionDenied("不可删除超级管理员")
         instance.delete()
@@ -41,7 +40,7 @@ class UserView(ApiModelViewSet):
 
 
 class ChangePasswordView(CreateAPIView):
-    # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
     serializer_class = serializers.ChangePasswordSerializer
 
     # def create(self, request, *args, **kwargs):
@@ -56,15 +55,15 @@ class ChangePasswordView(CreateAPIView):
 # 创建项目，项目列表
 class ProjectView(ApiModelViewSet):
     serializer_class = serializers.ProjectSerializer
-    # permission_classes = [IsAuthenticated, ProjectOperationPermission]
+    permission_classes = [IsAuthenticated, ProjectOperationPermission]
 
     def get_queryset(self):
-        # user = self.request.user
-        # if user.is_superuser:
-        #     return Project.objects.all()
-        # return user.project_set.all()
+        user = self.request.user
+        if user.is_superuser:
+            return Project.objects.all()
+        return user.project_set.all()
 
-        return Project.objects.all()
+        # return Project.objects.all()
 
     def get(self, request, pk, *args, **kwargs):
         response = super().get(request, pk, *args, **kwargs)
@@ -75,14 +74,17 @@ class ProjectView(ApiModelViewSet):
 # projects/(?P<project_id>\d+)/docs/
 # 上传文件和查看文件列表
 class DocView(ApiModelViewSet):
-    # permission_classes = [IsAuthenticated, DocumentOperationPermission]
+    """
+    文本增删改查视图
+    """
+    permission_classes = [IsAuthenticated,DocumentOperationPermission]
     serializer_class = serializers.DocumentSerializer
     filter_fields = ("is_annoteated",)
     ordering_fields = ('id')
 
     def get_queryset(self):
         project = get_object_or_404(Project, pk=self.kwargs['project_id'])
-        if project in self.request.user.project_set.all():
+        if project in self.request.user.project_set.all() or self.request.user.is_superuser:
             qs = project.documents.all().filter(is_delete=False)
             if project.randomize_document_order:
                 return qs.order_by("?")
@@ -124,7 +126,7 @@ class DocView(ApiModelViewSet):
 
 
 class LabelView(ApiModelViewSet):
-    # permission_classes = [IsAuthenticated, LabelOperationPermission]
+    permission_classes = [IsAuthenticated, LabelOperationPermission]
     serializer_class = serializers.LabelSerializer
 
     def get_queryset(self):
@@ -144,7 +146,6 @@ class LabelView(ApiModelViewSet):
 
 class AnnotationView(ApiModelViewSet):
     serializer_class = serializers.AnnotationSerializer
-
     permission_classes = [IsAuthenticated, AnnotationOperationPermission]
 
     def get_queryset(self):
@@ -185,23 +186,72 @@ class AnnotationView(ApiModelViewSet):
                         continue
                 except AttributeError:
                     return Response(status=status.HTTP_204_NO_CONTENT)
-                # except:
-                #     transaction.rollback(save_id)
-
 
 class ProjectUserView(ApiModelViewSet):
+    permission_classes = [IsAuthenticated, ProjectUserPermission]
     serializer_class = serializers.ProjectUserSerializer
     queryset = ProjectUser.objects.all()
 
-    # permission_classes = [IsAuthenticated, ProjectUserPermission]
-
     def destroy(self, request, *args, **kwargs):
         instance = get_object_or_404(ProjectUser, pk=self.kwargs['pk'])
-        if request.user.is_superuser or request.user.system_role == "system_manager":
+        if request.user.is_superuser:
             instance.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         elif instance.role == "project_owner":
             raise PermissionDenied("没有删除project_owner权限")
+        else:
+            instance.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class UsersInProjectView(ApiModelViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return serializers.CreateUserSerializer
+        elif self.action == "update":
+            return serializers.UpdateProjectRoleSerializer
+        else:
+            return serializers.UsersInProjectSerializer
+
+    def get_queryset(self):
+        project = get_object_or_404(Project, pk=self.kwargs["project_id"])
+        if self.action == "retrieve":
+            return User.objects.all()
+        else:
+            return ProjectUser.objects.filter(project=project)
+
+    def destroy(self, request, *args, **kwargs):
+        user_id = request.user.id
+        user = User.objects.get(pk=user_id)
+        project_id = self.kwargs["project_id"]
+        project = get_object_or_404(Project, pk=project_id)
+        operated_user_id = self.kwargs["pk"]
+        operated_user = get_object_or_404(User, pk=operated_user_id)
+        operated_project_user = ProjectUser.objects.get(project=project, user=operated_user)
+        project_user = ProjectUser.objects.get(project=project, user=user)
+        operated_project_user.delete()
+        if request.user.is_superuser:
+            operated_project_user.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        if project_user.role == "project_owner":
+            if operated_project_user.role == "project_owner":
+                raise PermissionDenied("没有删除project_owner权限")
+            else:
+                operated_project_user.delete()
+                return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def update(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            raise PermissionDenied("权限不足，无法修改项目成员角色")
+        operated_user = get_object_or_404(User, pk=self.kwargs["pk"])
+        project = get_object_or_404(Project, pk=self.kwargs["project_id"])
+        instance = ProjectUser.objects.get(project=project, user=operated_user)
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 class StatisticView(APIView):
