@@ -148,10 +148,13 @@ USE_L10N = True
 # USE_TZ = True
 USE_TZ = False
 
+
+LANGUAGE_CODE = 'zh-hans'
 STATIC_URL = '/static/'
 STATICFILES_DIRS = (
     os.path.join(BASE_DIR, 'common_static'),
 )
-LANGUAGE_CODE = 'zh-hans'
+STATIC_ROOT = os.path.join(os.path.dirname(BASE_DIR), 'static')
 
 MEDIA_ROOT = "D:/doccan_2_files"
+
