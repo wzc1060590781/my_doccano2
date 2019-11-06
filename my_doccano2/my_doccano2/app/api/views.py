@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from app.utils.Viewset import ApiModelViewSet
-from .models import User, Project, Document, ProjectUser
+from .models import User, Project, Document, ProjectUser, Algorithm
 from . import serializers
 from .permissions import ProjectOperationPermission, DocumentOperationPermission, UserOperationPermission, \
     LabelOperationPermission, AnnotationOperationPermission, ProjectUserPermission
@@ -20,7 +20,7 @@ class UserView(ApiModelViewSet):
     list:
     返回用户列表
     """
-    permission_classes = [IsAuthenticated, UserOperationPermission]
+    # permission_classes = [IsAuthenticated, UserOperationPermission]
     serializer_class = serializers.CreateUserSerializer
     queryset = User.objects.filter(is_delete=False)
     filter_fields = ("username",)
@@ -38,17 +38,21 @@ class UserView(ApiModelViewSet):
         instance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+class CreateUserView(ApiModelViewSet):
+    serializer_class = serializers.CreateUserSerializer
 
-class ChangePasswordView(CreateAPIView):
+
+
+class ChangePasswordView(ApiModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = serializers.ChangePasswordSerializer
 
-    # def create(self, request, *args, **kwargs):
-    #     user = get_object_or_404(User, pk=self.kwargs['pk'])
-    #     if user.id == request.user.id:
-    #         return super().create(request,*args,**kwargs)
-    #     else:
-    #         raise PermissionDenied("没有权限修改其他用户密码")
+    def create(self, request, *args, **kwargs):
+        user = get_object_or_404(User, pk=self.kwargs['pk'])
+        if user.id == request.user.id:
+            return super().create(request,*args,**kwargs)
+        else:
+            raise PermissionDenied("没有权限修改其他用户密码")
 
 
 # url(r'^projects/(?P<pk>\d+)/$', views.ProjectListView.as_view()),
@@ -173,19 +177,29 @@ class AnnotationView(ApiModelViewSet):
         document = get_object_or_404(Document, pk=document_id)
         with transaction.atomic():
             save_id = transaction.savepoint()
+            response = Response({
+                        "status": status.HTTP_204_NO_CONTENT,
+                        "success": True,
+                        "message": "成功",
+                        "data": None
+                    }, status=status.HTTP_204_NO_CONTENT)
             while True:
-                instance = self.get_object()
-                instance.delete()
+                # try:
+                #     instance = self.get_object()
+                #     instance.delete()
+                # return Response(status=status.HTTP_204_NO_CONTENT)
+
                 try:
+                    instance = self.get_object()
+                    instance.delete()
                     result = Document.objects.filter(pk=instance.document.id, annotations=None).update(
                         is_annoteated=False)
-                    if result:
-                        return Response(status=status.HTTP_204_NO_CONTENT)
-                    else:
-                        transaction.rollback(save_id)
-                        continue
+                    return response
                 except AttributeError:
-                    return Response(status=status.HTTP_204_NO_CONTENT)
+                    return response
+                except Exception:
+                    transaction.savepoint_rollback(save_id)
+                    continue
 
 class ProjectUserView(ApiModelViewSet):
     permission_classes = [IsAuthenticated, ProjectUserPermission]
@@ -252,6 +266,18 @@ class UsersInProjectView(ApiModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+class AlgorithmView(ApiModelViewSet):
+    def get_serializer_class(self):
+        if self.action == "update":
+            return serializers.UpdateAlgorithmSerializer
+        else:
+            return serializers.AlgorithmSerializer
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            return Algorithm.objects.filter(is_delete=False)
+        else:
+            raise PermissionDenied("权限不足")
 
 
 class StatisticView(APIView):

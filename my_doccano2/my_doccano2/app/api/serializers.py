@@ -1,4 +1,5 @@
 import json
+import os
 import re
 
 from django.contrib.auth.hashers import check_password
@@ -11,7 +12,8 @@ from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_jwt.settings import api_settings
 
-from .models import User, Project, ProjectUser, Document, Label, Annotation
+from app import settings
+from .models import User, Project, ProjectUser, Document, Label, Annotation, Algorithm
 
 
 class CreateUserSerializer(serializers.ModelSerializer):
@@ -51,7 +53,6 @@ class CreateUserSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
-
         # 判断两次密码
         if data['password'] != data['password2']:
             raise serializers.ValidationError('两次密码不一致')
@@ -132,14 +133,14 @@ class UpdateSelfSerializer(serializers.ModelSerializer):
 
 class ChangePasswordSerializer(serializers.ModelSerializer):
     username = serializers.CharField(read_only=True)
-    new_password = serializers.CharField(write_only=True)
-    new_password2 = serializers.CharField(write_only=True)
-    phone_number = serializers.CharField(read_only=True)
     password = serializers.CharField(write_only=True)
+    password2 = serializers.CharField(write_only=True)
+    phone_number = serializers.CharField(read_only=True)
+    origin_password = serializers.CharField(write_only=True)
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'password', 'new_password', "new_password2", "phone_number")
+        fields = ('id', 'username', 'password', 'password2', "origin_password", "phone_number")
         extra_kwargs = {
             'new_password': {
                 'write_only': True,
@@ -154,18 +155,20 @@ class ChangePasswordSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         user = self.context["request"].user
-        if not check_password(self.context["request"].data["password"], user.password):
+        if not check_password(data["origin_password"], user.password):
             raise serializers.ValidationError("密码错误")
         # 判断两次密码
-        if data['new_password'] != data['new_password2']:
+        if data['password'] != data['password2']:
             raise serializers.ValidationError('两次密码不一致')
+        return data
 
     def create(self, validated_data):
-        del validated_data["password"]
-        del validated_data["new_password2"]
+        del validated_data["origin_password"]
+        del validated_data["password2"]
         # password = validated_data["password"]
-        user = super().create(validated_data)
-        user.set_password(validated_data["new_password"])
+        user_id = self.context["request"].user.id
+        user = User.objects.get(pk=user_id)
+        user.set_password(validated_data["password"])
         user.save()
         return user
 
@@ -294,7 +297,7 @@ class AnnotationSerializer(serializers.ModelSerializer):
                         document.save()
                         return annotation
                     except:
-                        transaction.rollback(save_id)
+                        transaction.savepoint_rollback(save_id)
                         continue
                 else:
                     try:
@@ -305,7 +308,7 @@ class AnnotationSerializer(serializers.ModelSerializer):
                             is_annoteated=True)
                         return annotation
                     except:
-                        transaction.rollback(save_id)
+                        transaction.savepoint_rollback(save_id)
                         continue
 
             #         try:
@@ -494,10 +497,55 @@ class UpdateProjectRoleSerializer(serializers.ModelSerializer):
         else:
             raise PermissionDenied("权限不足")
 
-    # def update(self, instance, validated_data):
-    #     project = validated_data["project"]
-    #     user = validated_data["user"]
-    #     project_user = ProjectUser.objects.get(project=project,user=user)
-    #     project_user.role = validated_data["role"]
-    #     project_user.save()
-    #     return project_user
+
+class AlgorithmSerializer(serializers.ModelSerializer):
+    code_url = serializers.CharField(read_only=True)
+    model_url = serializers.CharField(read_only=True)
+    algorithm_file = serializers.FileField(write_only=True)
+    class Meta:
+        model = Algorithm
+        fields = ("id","algorithm_type", "name", "mini_quantity","code_url","model_url","description","algorithm_file")
+
+    def validate(self, attrs):
+        # text = attrs.get("algorithm_file", None)
+        f = self.context["request"].FILES.get('algorithm_file',None)
+        if not f:
+            raise serializers.ValidationError('未上传文件')
+        if not f.name.endswith(".py"):
+            raise serializers.ValidationError('文件格式有误，请上传.py格式文件')
+        file_path = os.path.join(settings.MEDIA_ROOT, f.name)
+        with open(file_path, 'wb') as fp:
+            for info in f.chunks():
+                fp.write(info)
+            fp.close()
+        attrs["code_url"] = os.path.join(settings.MEDIA_ROOT, f.name)
+        attrs["model_url"] = os.path.join(file_path[:-3],f.name)
+        return attrs
+
+    def create(self, validated_data):
+        del validated_data["algorithm_file"]
+        return super().create(validated_data)
+
+class UpdateAlgorithmSerializer(serializers.ModelSerializer):
+    code_url = serializers.CharField(read_only=True)
+    model_url = serializers.CharField(read_only=True)
+    algorithm_file = serializers.FileField(allow_empty_file=True,read_only=True)
+    class Meta:
+        model = Algorithm
+        fields = ("id","algorithm_type", "name", "mini_quantity","code_url","model_url","description","algorithm_file")
+
+    def validate(self, attrs):
+        # text = attrs.get("algorithm_file", None)
+        f = self.context["request"].FILES.get('algorithm_file',None)
+        if not f:
+            return attrs
+        if not f.name.endswith(".py"):
+            raise serializers.ValidationError('文件格式有误，请上传.py格式文件')
+        file_path = os.path.join(settings.MEDIA_ROOT, f.name)
+        with open(file_path, 'wb') as fp:
+            for info in f.chunks():
+                fp.write(info)
+            fp.close()
+        attrs["code_url"] = os.path.join(settings.MEDIA_ROOT, f.name)
+        attrs["model_url"] = os.path.join(file_path[:-3], f.name)
+        return attrs

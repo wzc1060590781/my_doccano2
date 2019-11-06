@@ -1,9 +1,9 @@
 from django.conf.urls import url
 from rest_framework_jwt.views import obtain_jwt_token
 from . import views
-
 urlpatterns = [
-    url(r'^users/$', views.UserView.as_view({'get': 'list', 'post': 'create'})),
+    url(r'^users/$', views.UserView.as_view({'get': 'list'})),
+    url(r'^register/$', views.CreateUserView.as_view({"post":"create"})),
     url(r'^users/(?P<pk>\d+)$',
         views.UserView.as_view({'get': 'retrieve', 'put': 'update', "patch": "update", 'delete': 'destroy'})),
     url(r'^authorizations/$', obtain_jwt_token),
@@ -24,10 +24,12 @@ urlpatterns = [
     url(r'^projects/(?P<project_id>\d+)/users$', views.UsersInProjectView.as_view({'get': "list", "post": "create"})),
     url(r'^projects/(?P<project_id>\d+)/users/(?P<pk>\d+)$',
         views.UsersInProjectView.as_view({"get": "retrieve", 'delete': "destroy", "put": "update"})),
-    # url(r"^project_user_relations/$",
-    #     views.ProjectUserView.as_view({'get': 'list', 'post': 'create'})),
-    # url(r"^project_user_relations/(?P<pk>\d+)$",
-    #     views.ProjectUserView.as_view({'get': 'retrieve', 'put': 'update', "patch": "update", 'delete': 'destroy'})),
+    url(r'^algorithms$', views.AlgorithmView.as_view({'get': "list", "post": "create"})),
+    url(r'^algorithms/(?P<pk>\d+)$',
+        views.AlgorithmView.as_view({"get": "retrieve", 'delete': "destroy", "put": "update"})),
     url(r"^users/(?P<pk>\d+)/password",
-        views.ChangePasswordView.as_view()),
+        views.ChangePasswordView.as_view({"post":"create"})),
 ]
+
+
+

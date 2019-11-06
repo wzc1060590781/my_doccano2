@@ -153,3 +153,5 @@ STATICFILES_DIRS = (
     os.path.join(BASE_DIR, 'common_static'),
 )
 LANGUAGE_CODE = 'zh-hans'
+
+MEDIA_ROOT = "D:/doccan_2_files"
