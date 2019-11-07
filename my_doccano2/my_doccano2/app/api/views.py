@@ -1,14 +1,19 @@
+from django.core.mail import send_mail
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.generics import GenericAPIView, CreateAPIView
-from rest_framework.mixins import CreateModelMixin
+from rest_framework.generics import GenericAPIView, CreateAPIView, UpdateAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from api.serializers import ResetPasswordSerializer
+from app import settings
 from app.utils.Viewset import ApiModelViewSet
+from app.utils.celery_function import generate_verify_email_url, check_verify_email_token
+from celery_tasks.email.tasks import send_find_password_email
 from .models import User, Project, Document, ProjectUser, Algorithm
 from . import serializers
 from .permissions import ProjectOperationPermission, DocumentOperationPermission, UserOperationPermission, \
@@ -38,9 +43,9 @@ class UserView(ApiModelViewSet):
         instance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+
 class CreateUserView(ApiModelViewSet):
     serializer_class = serializers.CreateUserSerializer
-
 
 
 class ChangePasswordView(ApiModelViewSet):
@@ -50,7 +55,7 @@ class ChangePasswordView(ApiModelViewSet):
     def create(self, request, *args, **kwargs):
         user = get_object_or_404(User, pk=self.kwargs['pk'])
         if user.id == request.user.id:
-            return super().create(request,*args,**kwargs)
+            return super().create(request, *args, **kwargs)
         else:
             raise PermissionDenied("没有权限修改其他用户密码")
 
@@ -81,7 +86,7 @@ class DocView(ApiModelViewSet):
     """
     文本增删改查视图
     """
-    permission_classes = [IsAuthenticated,DocumentOperationPermission]
+    permission_classes = [IsAuthenticated, DocumentOperationPermission]
     serializer_class = serializers.DocumentSerializer
     filter_fields = ("is_annoteated",)
     ordering_fields = ('id')
@@ -178,11 +183,11 @@ class AnnotationView(ApiModelViewSet):
         with transaction.atomic():
             save_id = transaction.savepoint()
             response = Response({
-                        "status": status.HTTP_204_NO_CONTENT,
-                        "success": True,
-                        "message": "成功",
-                        "data": None
-                    }, status=status.HTTP_204_NO_CONTENT)
+                "status": status.HTTP_204_NO_CONTENT,
+                "success": True,
+                "message": "成功",
+                "data": None
+            }, status=status.HTTP_204_NO_CONTENT)
             while True:
                 # try:
                 #     instance = self.get_object()
@@ -200,6 +205,7 @@ class AnnotationView(ApiModelViewSet):
                 except Exception:
                     transaction.savepoint_rollback(save_id)
                     continue
+
 
 class ProjectUserView(ApiModelViewSet):
     permission_classes = [IsAuthenticated, ProjectUserPermission]
@@ -267,18 +273,68 @@ class UsersInProjectView(ApiModelViewSet):
         serializer.save()
         return Response(serializer.data)
 
+
 class AlgorithmView(ApiModelViewSet):
     def get_serializer_class(self):
         if self.action == "update":
             return serializers.UpdateAlgorithmSerializer
         else:
             return serializers.AlgorithmSerializer
+
     def get_queryset(self):
         if self.request.user.is_superuser:
             return Algorithm.objects.filter(is_delete=False)
         else:
             raise PermissionDenied("权限不足")
 
+
+class SendEmail(GenericAPIView):
+    def post(self, request):
+        email = request.data["email"]
+        user = get_object_or_404(User, email=email)
+        user_id = user.id
+        verify_url = generate_verify_email_url(user_id, email)
+        send_find_password_email(email, verify_url)
+        return Response(
+            {
+                "status": 200,
+                "success": True,
+                "message": "发送成功"
+            }, status=status.HTTP_200_OK)
+        # url = generate_verify_email_url()
+
+    def get(self, request):
+        token = request.query_params.get("token", None)
+        if not token:
+            raise Http404
+        else:
+            user = check_verify_email_token(token)
+            if user:
+                return Response({
+                    "status": 200,
+                    "success": True,
+                    "message": "验证成功",
+                    "data": {
+                        "id": user.id,
+                        "email": user.email,
+                        "token": token
+                    }
+                }, status=status.HTTP_200_OK)
+
+
+class ResetPassword(UpdateAPIView):
+    serializer_class = ResetPasswordSerializer
+
+    def get_queryset(self):
+        return User.objects.all()
+
+    def put(self, request, *args, **kwargs):
+        user_id = request.data.get("id", None)
+        instance = User.objects.get(pk=user_id)
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 class StatisticView(APIView):
     def get(self, request, *args, **kwargs):

@@ -13,6 +13,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework_jwt.settings import api_settings
 
 from app import settings
+from app.utils.celery_function import check_verify_email_token
 from .models import User, Project, ProjectUser, Document, Label, Annotation, Algorithm
 
 
@@ -131,6 +132,41 @@ class UpdateSelfSerializer(serializers.ModelSerializer):
         return value
 
 
+class ResetPasswordSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField()
+    username = serializers.CharField(read_only=True)
+    password = serializers.CharField(write_only=True)
+    password2 = serializers.CharField(write_only=True)
+    phone_number = serializers.CharField(read_only=True)
+    token = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'password', 'password2', "phone_number","token")
+
+    def validate(self, attrs):
+        token = attrs["token"]
+        user = check_verify_email_token(token)
+        if user:
+            if user.id != attrs["id"]:
+                raise serializers.ValidationError("token和用户信息不匹配")
+            if attrs['password'] != attrs['password2']:
+                raise serializers.ValidationError('两次密码不一致')
+            else:
+                return attrs
+        else:
+            raise serializers.ValidationError("token有误")
+
+    def update(self, instance, validated_data):
+        del validated_data["id"]
+        del validated_data["password2"]
+        del validated_data["token"]
+        instance.set_password(validated_data["password"])
+        instance.save()
+        return instance
+
+
+
 class ChangePasswordSerializer(serializers.ModelSerializer):
     username = serializers.CharField(read_only=True)
     password = serializers.CharField(write_only=True)
@@ -175,6 +211,7 @@ class ChangePasswordSerializer(serializers.ModelSerializer):
 
 class LabelSerializer(serializers.ModelSerializer):
     project = serializers.StringRelatedField(read_only=True)
+
     class Meta:
         model = Label
         fields = ["id", "text", "background_color", "text_color", "project", "prefix_key", "suffix_key"]
@@ -251,7 +288,7 @@ class AnnotationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Annotation
-        fields = ["id", "document", "prob", "manual", "label", "start_offset", "end_offset", "annoted_by","label_id"]
+        fields = ["id", "document", "prob", "manual", "label", "start_offset", "end_offset", "annoted_by", "label_id"]
 
     def validate(self, attrs):
         start_offset = attrs["start_offset"]
@@ -446,6 +483,7 @@ class ProjectUserSerializer(serializers.ModelSerializer):
         project_user.save()
         return project_user
 
+
 class UsersInProjectSerializer(serializers.ModelSerializer):
     user = SubUserSerializer(read_only=True)
     user_id = serializers.IntegerField(write_only=True)
@@ -502,13 +540,15 @@ class AlgorithmSerializer(serializers.ModelSerializer):
     code_url = serializers.CharField(read_only=True)
     model_url = serializers.CharField(read_only=True)
     algorithm_file = serializers.FileField(write_only=True)
+
     class Meta:
         model = Algorithm
-        fields = ("id","algorithm_type", "name", "mini_quantity","code_url","model_url","description","algorithm_file")
+        fields = (
+        "id", "algorithm_type", "name", "mini_quantity", "code_url", "model_url", "description", "algorithm_file")
 
     def validate(self, attrs):
         # text = attrs.get("algorithm_file", None)
-        f = self.context["request"].FILES.get('algorithm_file',None)
+        f = self.context["request"].FILES.get('algorithm_file', None)
         if not f:
             raise serializers.ValidationError('未上传文件')
         if not f.name.endswith(".py"):
@@ -519,24 +559,27 @@ class AlgorithmSerializer(serializers.ModelSerializer):
                 fp.write(info)
             fp.close()
         attrs["code_url"] = os.path.join(settings.MEDIA_ROOT, f.name)
-        attrs["model_url"] = os.path.join(file_path[:-3],f.name)
+        attrs["model_url"] = os.path.join(file_path[:-3], f.name)
         return attrs
 
     def create(self, validated_data):
         del validated_data["algorithm_file"]
         return super().create(validated_data)
 
+
 class UpdateAlgorithmSerializer(serializers.ModelSerializer):
     code_url = serializers.CharField(read_only=True)
     model_url = serializers.CharField(read_only=True)
-    algorithm_file = serializers.FileField(allow_empty_file=True,read_only=True)
+    algorithm_file = serializers.FileField(allow_empty_file=True, read_only=True)
+
     class Meta:
         model = Algorithm
-        fields = ("id","algorithm_type", "name", "mini_quantity","code_url","model_url","description","algorithm_file")
+        fields = (
+        "id", "algorithm_type", "name", "mini_quantity", "code_url", "model_url", "description", "algorithm_file")
 
     def validate(self, attrs):
         # text = attrs.get("algorithm_file", None)
-        f = self.context["request"].FILES.get('algorithm_file',None)
+        f = self.context["request"].FILES.get('algorithm_file', None)
         if not f:
             return attrs
         if not f.name.endswith(".py"):

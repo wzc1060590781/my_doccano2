@@ -29,6 +29,8 @@ urlpatterns = [
         views.AlgorithmView.as_view({"get": "retrieve", 'delete': "destroy", "put": "update"})),
     url(r"^users/(?P<pk>\d+)/password",
         views.ChangePasswordView.as_view({"post":"create"})),
+    url(r"^send_email$",views.SendEmail.as_view()),
+    url(r"^reset_password$",views.ResetPassword.as_view()),
 ]
 
 
