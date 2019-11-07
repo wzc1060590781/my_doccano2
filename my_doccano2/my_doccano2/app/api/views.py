@@ -294,7 +294,7 @@ class SendEmail(GenericAPIView):
         user = get_object_or_404(User, email=email)
         user_id = user.id
         verify_url = generate_verify_email_url(user_id, email)
-        send_find_password_email(email, verify_url)
+        send_find_password_email.delay(email, verify_url)
         return Response(
             {
                 "status": 200,
