@@ -1,4 +1,6 @@
-from celery import Celery
+from celery import Celery,platforms
+
+platforms.C_FORCE_ROOT = True
 
 
 # 为celery使用django配置文件进行设置

@@ -13,7 +13,7 @@ def generate_verify_email_url(user_id,email):
     serializer = TimedJSONWebSignatureSerializer(settings.SECRET_KEY, expires_in=constants.VERIFY_EMAIL_TOKEN_EXPIRES)
     data = {'user_id': user_id, 'email': email}
     token = serializer.dumps(data).decode()
-    verify_url = 'http://127.0.0.1:8080/find_password.html?token=' + token
+    verify_url = 'http://121.41.4.174/find_password.html?token=' + token
     return verify_url
 
 
