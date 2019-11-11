@@ -160,10 +160,15 @@ MEDIA_ROOT = "D:/doccan_2_files"
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.163.com'
-EMAIL_PORT = 25
+EMAIL_PORT = 465
+# EMAIL_USER_TLS = True
+
+# EMAIL_SUBJECT_PREFIX = u'[Sercheif]'
+
+# EMIAL_USE_TLS = False
 #发送邮件的邮箱
 EMAIL_HOST_USER = 'wzc18220844786@163.com'
 #在邮箱中设置的客户端授权密码
 EMAIL_HOST_PASSWORD = '123456789abc'
 #收件人看到的发件人
-EMAIL_FROM = '打标平台<wzc18220844786@163.com>'
+EMAIL_FROM = 'wzc18220844786@163.com'
