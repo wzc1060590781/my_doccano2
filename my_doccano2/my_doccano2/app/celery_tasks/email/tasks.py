@@ -26,7 +26,7 @@ def send_find_password_email(to_email, verify_url):
         "hostname": "smtp.163.com",
         "username": "wzc18220844786@163.com",
         "password": "123456789abc",
-        "mail_subject": "test",
+        "mail_subject": "打标平台邮件",
         "mail_text": html_message,
         "mail_encoding": "utf-8"
     }
