@@ -14,6 +14,7 @@ from rest_framework_jwt.settings import api_settings
 
 from app import settings
 from app.utils.celery_function import check_verify_email_token
+from app.utils.upload_text_utils import val_text_name, get_text_str, val_text_format
 from .models import User, Project, ProjectUser, Document, Label, Annotation, Algorithm
 
 
@@ -381,41 +382,166 @@ class DocumentSerializer(serializers.ModelSerializer):
     annotations = AnnotationSerializer(many=True, read_only=True)
     is_annoteated = serializers.BooleanField(default=False)
     title = serializers.CharField(read_only=True)
+    is_multitext = serializers.BooleanField(write_only=True,allow_null=False)
 
     class Meta:
         model = Document
-        fields = ('id', "text_upload", "text", 'project', "is_annoteated", "annotations", "title")
+        fields = ('id', "text_upload", "text", 'project', "is_annoteated", "annotations", "title","is_multitext")
 
     def validate(self, attrs):
-        text = attrs.get("text_upload", None)
-        text_str = text.read().decode("utf-8")
-        if not text:
-            raise serializers.ValidationError('未上传文件')
-        if not (text.name.endswith(".txt") or text.name.endswith(".json")):
-            raise serializers.ValidationError('文件格式有误，请上传.txt格式文件，或json格式文件')
-        if text.name.endswith(".json"):
+        if not attrs["is_multitext"]:
+            text = self.context["request"].FILES.get("text_upload")
+            if not text:
+                raise serializers.ValidationError('未上传文件')
             try:
-                text_dict = json.loads(text_str)
+                title = val_text_name(text.name)
+                attrs["title"] = title
             except:
-                raise serializers.ValidationError("文本格式有误")
-            # TODO
-            text_str = text_dict.get("文书内容", None)
-        if Document.objects.filter(text=text_str).count():
-            raise serializers.ValidationError('文件已存在，请勿重复上传')
-        attrs["text"] = text_str
-        try:
-            title = re.match(r"(.*?)\.(.*?)", text.name).group(1)
-        except:
-            raise serializers.ValidationError("文件名有误")
-        attrs["title"] = title
-        return attrs
+                raise serializers.ValidationError("文件名有误")
+            text_str = get_text_str(text)
+            try:
+                val_text_format(text,text_str)
+            except:
+                raise serializers.ValidationError("格式有误")
+            if Document.objects.filter(text=text_str).count():
+                raise serializers.ValidationError('文件已存在，请勿重复上传')
+            attrs["text"] = text_str
+            return attrs
+        # else:
+        #     file_list = self.context["request"].FILES.getlist('text_upload')
+        #     if len(file_list)==0:
+        #         raise serializers.ValidationError("未上传文件")
+        #     wrong_count = 0
+        #     right_file_list = []
+        #     for text in file_list:
+        #         text_dict = {}
+        #         try:
+        #             title =val_text_name(text.name)
+        #             text_dict["title"] = title
+        #         except:
+        #             # raise serializers.ValidationError("文件名有误")
+        #             wrong_count += 1
+        #             continue
+        #         text_str = get_text_str(text)
+        #         try:
+        #             val_text_format(text, text_str)
+        #         except:
+        #             # raise serializers.ValidationError("格式有误")
+        #             wrong_count += 1
+        #             continue
+        #         if Document.objects.filter(text=text_str).count():
+        #             # raise serializers.ValidationError('文件已存在，请勿重复上传')
+        #             wrong_count += 1
+        #             continue
+        #         text_dict["text"] = text_str
+        #         right_file_list.append(text_dict)
+        #     attrs["file_list"] = right_file_list
+        #     return attrs
+
+    # def val_text_name(self,name):
+    #     if not (name.endswith(".txt") or name.endswith(".json")):
+    #         raise serializers.ValidationError('文件格式有误，请上传.txt格式文件，或json格式文件')
+    #     try:
+    #         title = re.match(r"(.*?)\.(.*?)", name).group(1)
+    #     except:
+    #         raise serializers.ValidationError("文件名有误")
+    #     else:
+    #         return title
+    #
+    # def get_text_str(self,text):
+    #     text_str = ""
+    #     for chunk in text.chunks():
+    #         text_str += chunk.decode("utf-8").strip()
+    #     return text_str
+    #
+    # def val_text_format(self,text,text_str):
+    #     if text.name.endswith(".json"):
+    #         try:
+    #             text_dict = json.loads(text_str)
+    #         except:
+    #             raise serializers.ValidationError("文本格式有误")
+    #         # TODO
+    #         text_str = text_dict.get("文书内容", None)
+    #     return text_str
 
     def create(self, validated_data):
         del validated_data["text_upload"]
+        del validated_data["is_multitext"]
         project_id = self.context["view"].kwargs["project_id"]
         project = Project.objects.get(pk=int(project_id))
         validated_data["project"] = project
         return super().create(validated_data)
+
+
+class CreateMultiDocument(serializers.ModelSerializer):
+    text_upload = serializers.FileField(write_only=True)
+    text = serializers.CharField(read_only=True)
+    annotations = AnnotationSerializer(many=True, read_only=True)
+    is_annoteated = serializers.BooleanField(default=False)
+    title = serializers.CharField(read_only=True)
+    is_multitext = serializers.BooleanField(write_only=True, allow_null=False)
+    wrong_count = serializers.BooleanField(write_only=True, allow_null=False)
+
+    class Meta:
+        model = Document
+        fields = ('id', "text_upload", "text", 'project', "is_annoteated", "annotations", "title","wrong_count","is_multitext")
+
+    def validate(self, attrs):
+        file_list = self.context["request"].FILES.getlist('text_upload')
+        if len(file_list) == 0:
+            raise serializers.ValidationError("未上传文件")
+        wrong_count = 0
+        right_file_list = []
+        for text in file_list:
+            text_dict = {}
+            try:
+                title = val_text_name(text.name)
+                text_dict["title"] = title
+            except:
+                # raise serializers.ValidationError("文件名有误")
+                wrong_count += 1
+                continue
+            text_str = get_text_str(text)
+            try:
+                val_text_format(text, text_str)
+            except:
+                # raise serializers.ValidationError("格式有误")
+                wrong_count += 1
+                continue
+            if Document.objects.filter(text=text_str).count():
+                # raise serializers.ValidationError('文件已存在，请勿重复上传')
+                wrong_count += 1
+                continue
+            text_dict["text"] = text_str
+            right_file_list.append(text_dict)
+        attrs["file_list"] = right_file_list
+        attrs["wrong_count"] = wrong_count
+        return attrs
+
+    def create(self, validated_data):
+        # del validated_data["text_upload"]
+        # del validated_data["is_multitext"]
+        wrong_count = validated_data["wrong_count"]
+        # del validated_data["wrong_count"]
+        file_list = validated_data["file_list"]
+        # del validated_data["file_list"]
+        project_id = self.context["view"].kwargs["project_id"]
+        project = Project.objects.get(pk=int(project_id))
+        # validated_data["project"] = project
+        data = {}
+        doc_list = []
+        for file in file_list:
+            # validated_data["text"] = file["text"]
+            # validated_data["title"] = file["title"]
+            try:
+                doc = Document.objects.create(text = file["text"],project=project,title = file["title"])
+                doc_list.append(doc)
+            except:
+                 wrong_count  += 1
+        data["wrong_count"] = wrong_count
+        data["doc_list"] = doc_list
+        data["project"] = project.name
+        return data
 
 
 class ProjectSerializer(serializers.ModelSerializer):

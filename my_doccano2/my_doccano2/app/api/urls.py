@@ -7,7 +7,7 @@ urlpatterns = [
     url(r'^users/(?P<pk>\d+)$',
         views.UserView.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'})),
     url(r'^authorizations$', obtain_jwt_token),
-    url(r'^projects/$', views.ProjectView.as_view({'get': 'list', 'post': 'create'})),
+    url(r'^projects$', views.ProjectView.as_view({'get': 'list', 'post': 'create'})),
     url(r'^projects/(?P<pk>\d+)$',
         views.ProjectView.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'})),
     url(r'^projects/(?P<project_id>\d+)/docs$', views.DocView.as_view({'get': 'list', 'post': 'create'})),

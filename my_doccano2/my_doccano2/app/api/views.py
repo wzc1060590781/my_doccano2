@@ -2,6 +2,7 @@ from django.core.mail import send_mail
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404
+# from rest_framework import status
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import GenericAPIView, CreateAPIView, UpdateAPIView
@@ -65,6 +66,7 @@ class ChangePasswordView(ApiModelViewSet):
 class ProjectView(ApiModelViewSet):
     serializer_class = serializers.ProjectSerializer
     permission_classes = [IsAuthenticated, ProjectOperationPermission]
+    filter_fields = ("project_type",)
 
     def get_queryset(self):
         user = self.request.user
@@ -90,6 +92,12 @@ class DocView(ApiModelViewSet):
     serializer_class = serializers.DocumentSerializer
     filter_fields = ("is_annoteated",)
     ordering_fields = ('id')
+
+    def get_serializer_class(self):
+        if not self.request.data["is_multitext"]:
+            return serializers.DocumentSerializer
+        else:
+            return serializers.CreateMultiDocument
 
     def get_queryset(self):
         project = get_object_or_404(Project, pk=self.kwargs['project_id'])
@@ -126,12 +134,43 @@ class DocView(ApiModelViewSet):
         return response
 
     # TODO
-    def post(self, request, *args, **kwargs):
+    def create(self, request, *args, **kwargs):
         project = get_object_or_404(Project, pk=self.kwargs['project_id'])
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        if not request.data["is_multitext"]:
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            data = serializer.save()
+            print(data)
+            # return Response(data, status=status.HTTP_201_CREATED)
+            doc_list = data["doc_list"]
+            wrong_count = data["wrong_count"]
+            right_count = len(doc_list)
+            document_list = []
+            for doc in doc_list:
+                doc_dict = {}
+                doc_dict["id"] = doc.id
+                doc_dict["project"] = doc.project.name
+                doc_dict["is_annoteated"] = False
+                doc_dict["text"] = doc.text
+                doc_dict["title"] = doc.title
+                document_list.append(doc_dict)
+            response_data = {}
+            response_data["wrong_count"] = wrong_count
+            response_data["right_count"] = right_count
+            response_data["doc_list"] = document_list
+            if right_count == 0:
+                status_code = status.HTTP_400_BAD_REQUEST
+                response_data["success"] = False
+                response_data["message"] = "未上传成功任何文件"
+            else:
+                status_code = status.HTTP_201_CREATED
+                response_data["success"] = True
+                response_data["message"] = "成功"
+            response_data["status"] = status_code
+            return Response(response_data, status=status_code)
 
 
 class LabelView(ApiModelViewSet):
@@ -335,6 +374,7 @@ class ResetPassword(UpdateAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
 
 class StatisticView(APIView):
     def get(self, request, *args, **kwargs):

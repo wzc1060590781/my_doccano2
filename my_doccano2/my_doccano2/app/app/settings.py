@@ -31,20 +31,11 @@ CORS_ORIGIN_WHITLIST = (
     'http://127.0.0.1:8081',
     'http://localhost'
 )
-CORS_ALLOW_METHODS = (  'DELETE',  'GET',  'OPTIONS',  'PATCH',  'POST',  'PUT',  'VIEW', )
+CORS_ALLOW_METHODS = ( 'DELETE',  'GET',  'OPTIONS',  'PATCH',  'POST',  'PUT',  'VIEW', )
 CORS_ALLOW_CREDENTIALS = True
 # Application definition
 CORS_ORIGIN_ALLOW_ALL = True
 # Origin '*' in CORS_ORIGIN_WHITELIST is missing scheme 出现该错误则将其注释掉
-CORS_ALLOW_METHODS = (
-  'DELETE',
-  'GET',
-  'OPTIONS',
-  'PATCH',
-  'POST',
-  'PUT',
-  'VIEW',
-)
 CORS_ALLOW_HEADERS = (
   'XMLHttpRequest',
   'X_FILENAME',
