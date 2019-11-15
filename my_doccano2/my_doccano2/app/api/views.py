@@ -11,14 +11,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from api.serializers import ResetPasswordSerializer
-from app import settings
 from app.utils.Viewset import ApiModelViewSet
 from app.utils.celery_function import generate_verify_email_url, check_verify_email_token
 from celery_tasks.email.tasks import send_find_password_email
 from .models import User, Project, Document, ProjectUser, Algorithm
 from . import serializers
-from .permissions import ProjectOperationPermission, DocumentOperationPermission, UserOperationPermission, \
-    LabelOperationPermission, AnnotationOperationPermission, ProjectUserPermission
+from .permissions import ProjectOperationPermission, DocumentOperationPermission, LabelOperationPermission, AnnotationOperationPermission, ProjectUserPermission
 
 
 class UserView(ApiModelViewSet):
@@ -74,8 +72,6 @@ class ProjectView(ApiModelViewSet):
             return Project.objects.all()
         return user.project_set.all()
 
-        # return Project.objects.all()
-
     def get(self, request, pk, *args, **kwargs):
         response = super().get(request, pk, *args, **kwargs)
         response.data["count"] = Project.objects.get(pk=pk).documents.all().count()
@@ -89,7 +85,6 @@ class DocView(ApiModelViewSet):
     文本增删改查视图
     """
     permission_classes = [IsAuthenticated, DocumentOperationPermission]
-    # serializer_class = serializers.DocumentSerializer
     filter_fields = ("is_annoteated",)
     ordering_fields = ('id')
 
@@ -115,7 +110,6 @@ class DocView(ApiModelViewSet):
         document_list = []
 
         for data in response.data["results"]:
-            # 一个document
             docuemnt_dict = {}
             docuemnt_dict["id"] = data["id"]
             docuemnt_dict["text"] = data["text"]
@@ -192,8 +186,6 @@ class LabelView(ApiModelViewSet):
     def update(self, request, *args, **kwargs):
         kwargs["partial"] = True
         return super().update(request,*args,**kwargs)
-
-
 
 
 class AnnotationView(ApiModelViewSet):
