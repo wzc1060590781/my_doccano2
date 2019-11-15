@@ -539,20 +539,21 @@ class CreateMultiDocument(serializers.ModelSerializer):
 
 class ProjectSerializer(serializers.ModelSerializer):
     count = serializers.IntegerField(read_only=True)
-    labels = LabelSerializer(many=True, read_only=True)
-    update_time = serializers.DateTimeField(read_only=True)
     pic = serializers.ImageField(required=False)
+    update_time = serializers.DateTimeField(read_only=True)
+    labels = LabelSerializer(many=True, read_only=True)
 
     class Meta:
         model = Project
         fields = (
-            'id', 'name', "description", "project_type", "randomize_document_order", "update_time", "count", "labels",
-            "pic")
+            'id', 'name', "description", "project_type", "randomize_document_order", "update_time", "count",
+            "pic","labels")
 
     def validate(self, attrs):
-        picture = attrs["pic"]
-        picture.name = str(int(time.time())) + "." + picture.name.split(".")[1]
-        attrs["pic"] = picture
+        picture = attrs.get("pic",None)
+        if picture:
+            picture.name = str(int(time.time())) + "." + picture.name.split(".")[1]
+            attrs["pic"] = picture
         return attrs
 
 

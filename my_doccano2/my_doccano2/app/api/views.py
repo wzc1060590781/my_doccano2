@@ -77,6 +77,10 @@ class ProjectView(ApiModelViewSet):
         response.data["count"] = Project.objects.get(pk=pk).documents.all().count()
         return response
 
+    def update(self, request, *args, **kwargs):
+        kwargs["partial"] = True
+        return super().update(request, *args, **kwargs)
+
 
 # projects/(?P<project_id>\d+)/docs/
 # 上传文件和查看文件列表
