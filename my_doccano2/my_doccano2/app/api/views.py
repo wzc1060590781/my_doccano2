@@ -143,8 +143,6 @@ class DocView(ApiModelViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         else:
             data = serializer.save()
-            print(data)
-            # return Response(data, status=status.HTTP_201_CREATED)
             doc_list = data["doc_list"]
             wrong_count = data["wrong_count"]
             right_count = len(doc_list)

@@ -531,8 +531,6 @@ class CreateMultiDocument(serializers.ModelSerializer):
         data = {}
         doc_list = []
         for file in file_list:
-            # validated_data["text"] = file["text"]
-            # validated_data["title"] = file["title"]
             try:
                 doc = Document.objects.create(text = file["text"],project=project,title = file["title"])
                 doc_list.append(doc)
@@ -546,10 +544,11 @@ class CreateMultiDocument(serializers.ModelSerializer):
 
 class ProjectSerializer(serializers.ModelSerializer):
     count = serializers.IntegerField(read_only=True)
-
+    labels = LabelSerializer(many=True)
+    update_time = serializers.DateTimeField(read_only=True)
     class Meta:
         model = Project
-        fields = ('id', 'name', "description", "project_type", "randomize_document_order", "count")
+        fields = ('id', 'name', "description", "project_type", "randomize_document_order","update_time","count","labels")
 
 
 class SubProjectSerializer(serializers.ModelSerializer):
