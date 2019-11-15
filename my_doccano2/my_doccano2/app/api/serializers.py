@@ -27,7 +27,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'password', 'password2', "phone_number", "token")
+        fields = ('id', 'username', 'password', 'password2', "phone_number", "token", "email")
         extra_kwargs = {
             'username': {
                 'min_length': 3,
@@ -212,6 +212,7 @@ class ChangePasswordSerializer(serializers.ModelSerializer):
 
 class LabelSerializer(serializers.ModelSerializer):
     project = serializers.StringRelatedField(read_only=True)
+
     class Meta:
         model = Label
         fields = ["id", "text", "background_color", "project", "prefix_key", "suffix_key"]
@@ -225,6 +226,7 @@ class LabelSerializer(serializers.ModelSerializer):
                 }
             }
         }
+
     def validate_text_color(self, value):
         if not value.startswith("#"):
             raise serializers.ValidationError("颜色字符串应以#开始")
@@ -243,20 +245,22 @@ class LabelSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         text = attrs["text"]
         background_color = attrs["background_color"]
-        text_color = attrs["text_color"]
-        if background_color == text_color:
-            raise serializers.ValidationError("文字颜色和背景颜色不能一样")
         project_id = self.context["view"].kwargs["project_id"]
-        labels_queryset = Label.objects.filter(project_id=project_id)
-        pk = self.context["view"].kwargs.get("pk")
-        count = 0
-        if pk:
-            count = 1
-        if labels_queryset.filter(Q(text=text) | Q(background_color=background_color)).count() != count:
-            raise serializers.ValidationError("项目中已存在该标签或已存在该颜色标签")
         project = Project.objects.get(pk=int(project_id))
         attrs["project"] = project
-        return attrs
+        labels_queryset = Label.objects.filter(project_id=project_id).filter(
+            Q(text=text) | Q(background_color=background_color))
+        pk = self.context["view"].kwargs.get("pk")
+        exsist_count = labels_queryset.count()
+        if exsist_count == 0:
+            return attrs
+        elif exsist_count == 1:
+            if pk and pk == str(labels_queryset[0].id):
+                return attrs
+            else:
+                raise serializers.ValidationError("项目中已存在该标签或已存在该颜色标签")
+        else:
+            raise serializers.ValidationError("项目中已存在该标签或已存在该颜色标签")
 
 
 class SubLabelSerializer(serializers.ModelSerializer):
@@ -474,7 +478,8 @@ class CreateMultiDocument(serializers.ModelSerializer):
     class Meta:
         model = Document
         fields = (
-        'id', "text_upload", "text", 'project', "is_annoteated", "annotations", "title", "wrong_count", "is_multitext")
+            'id', "text_upload", "text", 'project', "is_annoteated", "annotations", "title", "wrong_count",
+            "is_multitext")
 
     def validate(self, attrs):
         file_list = self.context["request"].FILES.getlist('text_upload')
@@ -541,8 +546,8 @@ class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = (
-        'id', 'name', "description", "project_type", "randomize_document_order", "update_time", "count", "labels",
-        "pic")
+            'id', 'name', "description", "project_type", "randomize_document_order", "update_time", "count", "labels",
+            "pic")
 
     def validate(self, attrs):
         picture = attrs["pic"]

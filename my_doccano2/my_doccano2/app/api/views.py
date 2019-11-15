@@ -189,6 +189,12 @@ class LabelView(ApiModelViewSet):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    def update(self, request, *args, **kwargs):
+        kwargs["partial"] = True
+        return super().update(request,*args,**kwargs)
+
+
+
 
 class AnnotationView(ApiModelViewSet):
     serializer_class = serializers.AnnotationSerializer
@@ -226,11 +232,6 @@ class AnnotationView(ApiModelViewSet):
                 "data": None
             }, status=status.HTTP_204_NO_CONTENT)
             while True:
-                # try:
-                #     instance = self.get_object()
-                #     instance.delete()
-                # return Response(status=status.HTTP_204_NO_CONTENT)
-
                 try:
                     instance = self.get_object()
                     instance.delete()
@@ -338,7 +339,6 @@ class SendEmail(GenericAPIView):
                 "success": True,
                 "message": "发送成功"
             }, status=status.HTTP_200_OK)
-        # url = generate_verify_email_url()
 
     def get(self, request):
         token = request.query_params.get("token", None)
