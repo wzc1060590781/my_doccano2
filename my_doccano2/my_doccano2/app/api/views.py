@@ -89,12 +89,12 @@ class DocView(ApiModelViewSet):
     文本增删改查视图
     """
     permission_classes = [IsAuthenticated, DocumentOperationPermission]
-    serializer_class = serializers.DocumentSerializer
+    # serializer_class = serializers.DocumentSerializer
     filter_fields = ("is_annoteated",)
     ordering_fields = ('id')
 
     def get_serializer_class(self):
-        if not self.request.data["is_multitext"]:
+        if self.action == "post" and self.request.data["is_multitext"]:
             return serializers.DocumentSerializer
         else:
             return serializers.CreateMultiDocument

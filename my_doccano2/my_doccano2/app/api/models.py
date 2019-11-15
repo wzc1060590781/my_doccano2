@@ -63,6 +63,7 @@ class Project(BaseModel):
     randomize_document_order = models.BooleanField(default=False, verbose_name="是否乱序", help_text="是否乱序")
     description = models.TextField(default='', help_text="项目描述信息")
     project_type = models.CharField(max_length=30, choices=PROJECT_CHOICES, help_text="项目类型")
+    pic = models.ImageField(upload_to='project/',default="project/default.jpg")
     users = models.ManyToManyField(
         User,
         through='ProjectUser',  ## 自定义中间表
@@ -155,7 +156,6 @@ class Label(BaseModel):
     )
     text = models.CharField(max_length=100)
     background_color = models.CharField(max_length=7, default='#209cee')
-    text_color = models.CharField(max_length=7, default='#ffffff')
     project = models.ForeignKey(Project, related_name='labels', on_delete=models.CASCADE)
     prefix_key = models.CharField(max_length=10, blank=True, null=True, choices=PREFIX_KEYS)
     suffix_key = models.CharField(max_length=10, blank=True, null=True, choices=SUFFIX_KEYS)
@@ -165,6 +165,7 @@ class Label(BaseModel):
         verbose_name = "标记表"
         unique_together = (
             ('project', 'text'),
+            ('project','prefix_key', 'suffix_key'),
         )
 
     def __str__(self):

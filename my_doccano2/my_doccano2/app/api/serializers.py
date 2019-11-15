@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import time
 
 from django.contrib.auth.hashers import check_password
 
@@ -143,7 +144,7 @@ class ResetPasswordSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'password', 'password2', "phone_number","token")
+        fields = ('id', 'username', 'password', 'password2', "phone_number", "token")
 
     def validate(self, attrs):
         token = attrs["token"]
@@ -165,7 +166,6 @@ class ResetPasswordSerializer(serializers.ModelSerializer):
         instance.set_password(validated_data["password"])
         instance.save()
         return instance
-
 
 
 class ChangePasswordSerializer(serializers.ModelSerializer):
@@ -212,11 +212,9 @@ class ChangePasswordSerializer(serializers.ModelSerializer):
 
 class LabelSerializer(serializers.ModelSerializer):
     project = serializers.StringRelatedField(read_only=True)
-
     class Meta:
         model = Label
-        fields = ["id", "text", "background_color", "text_color", "project", "prefix_key", "suffix_key"]
-
+        fields = ["id", "text", "background_color", "project", "prefix_key", "suffix_key"]
         extra_kwargs = {
             'background_color': {
                 'min_length': 7,
@@ -225,17 +223,8 @@ class LabelSerializer(serializers.ModelSerializer):
                     'min_length': '颜色长度必须为7',
                     'max_length': '颜色长度必须为7',
                 }
-            },
-            'text_color': {
-                'min_length': 7,
-                'max_length': 7,
-                'error_messages': {
-                    'min_length': '颜色长度必须为7',
-                    'max_length': '颜色长度必须为7',
-                }
             }
         }
-
     def validate_text_color(self, value):
         if not value.startswith("#"):
             raise serializers.ValidationError("颜色字符串应以#开始")
@@ -382,11 +371,11 @@ class DocumentSerializer(serializers.ModelSerializer):
     annotations = AnnotationSerializer(many=True, read_only=True)
     is_annoteated = serializers.BooleanField(default=False)
     title = serializers.CharField(read_only=True)
-    is_multitext = serializers.BooleanField(write_only=True,allow_null=False)
+    is_multitext = serializers.BooleanField(write_only=True, allow_null=False)
 
     class Meta:
         model = Document
-        fields = ('id', "text_upload", "text", 'project', "is_annoteated", "annotations", "title","is_multitext")
+        fields = ('id', "text_upload", "text", 'project', "is_annoteated", "annotations", "title", "is_multitext")
 
     def validate(self, attrs):
         if not attrs["is_multitext"]:
@@ -400,7 +389,7 @@ class DocumentSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("文件名有误")
             text_str = get_text_str(text)
             try:
-                val_text_format(text,text_str)
+                val_text_format(text, text_str)
             except:
                 raise serializers.ValidationError("格式有误")
             if Document.objects.filter(text=text_str).count():
@@ -484,7 +473,8 @@ class CreateMultiDocument(serializers.ModelSerializer):
 
     class Meta:
         model = Document
-        fields = ('id', "text_upload", "text", 'project', "is_annoteated", "annotations", "title","wrong_count","is_multitext")
+        fields = (
+        'id', "text_upload", "text", 'project', "is_annoteated", "annotations", "title", "wrong_count", "is_multitext")
 
     def validate(self, attrs):
         file_list = self.context["request"].FILES.getlist('text_upload')
@@ -532,10 +522,10 @@ class CreateMultiDocument(serializers.ModelSerializer):
         doc_list = []
         for file in file_list:
             try:
-                doc = Document.objects.create(text = file["text"],project=project,title = file["title"])
+                doc = Document.objects.create(text=file["text"], project=project, title=file["title"])
                 doc_list.append(doc)
             except:
-                 wrong_count  += 1
+                wrong_count += 1
         data["wrong_count"] = wrong_count
         data["doc_list"] = doc_list
         data["project"] = project.name
@@ -544,11 +534,21 @@ class CreateMultiDocument(serializers.ModelSerializer):
 
 class ProjectSerializer(serializers.ModelSerializer):
     count = serializers.IntegerField(read_only=True)
-    labels = LabelSerializer(many=True)
+    labels = LabelSerializer(many=True, read_only=True)
     update_time = serializers.DateTimeField(read_only=True)
+    pic = serializers.ImageField(required=False)
+
     class Meta:
         model = Project
-        fields = ('id', 'name', "description", "project_type", "randomize_document_order","update_time","count","labels")
+        fields = (
+        'id', 'name', "description", "project_type", "randomize_document_order", "update_time", "count", "labels",
+        "pic")
+
+    def validate(self, attrs):
+        picture = attrs["pic"]
+        picture.name = str(int(time.time())) + "." + picture.name.split(".")[1]
+        attrs["pic"] = picture
+        return attrs
 
 
 class SubProjectSerializer(serializers.ModelSerializer):
@@ -669,7 +669,7 @@ class AlgorithmSerializer(serializers.ModelSerializer):
     class Meta:
         model = Algorithm
         fields = (
-        "id", "algorithm_type", "name", "mini_quantity", "code_url", "model_url", "description", "algorithm_file")
+            "id", "algorithm_type", "name", "mini_quantity", "code_url", "model_url", "description", "algorithm_file")
 
     def validate(self, attrs):
         # text = attrs.get("algorithm_file", None)
@@ -700,7 +700,7 @@ class UpdateAlgorithmSerializer(serializers.ModelSerializer):
     class Meta:
         model = Algorithm
         fields = (
-        "id", "algorithm_type", "name", "mini_quantity", "code_url", "model_url", "description", "algorithm_file")
+            "id", "algorithm_type", "name", "mini_quantity", "code_url", "model_url", "description", "algorithm_file")
 
     def validate(self, attrs):
         # text = attrs.get("algorithm_file", None)
