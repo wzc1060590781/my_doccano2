@@ -13,13 +13,6 @@ PROJECT_CHOICES = (
 )
 
 
-# SYSTEM_ROLE_CHOICE = (
-#     ("ordinary_user", "ordinary_user"),
-#     ("system_manager", "system_manager"),
-#     ("super_user", "super_user")
-# )
-
-
 class BaseModel(models.Model):
     create_time = models.DateTimeField(auto_now_add=True, verbose_name="创建时间", help_text="创建时间")
     update_time = models.DateTimeField(auto_now=True, verbose_name="更新时间", help_text="更新时间")
@@ -29,12 +22,8 @@ class BaseModel(models.Model):
 
 
 class User(AbstractUser):
-    # group = models.ForeignKey("tb_users_groups", related_name="users", blank=True, on_delete=models.SET_NULL,
-    #                           verbose_name="角色", help_text="角色")
     phone_number = models.CharField(max_length=11, null=True, verbose_name="手机号")
     is_delete = models.BooleanField(default=False)
-
-    # system_role = models.CharField(max_length=30, choices=SYSTEM_ROLE_CHOICE, help_text="系统角色", null=True, blank=True)
 
     def __str__(self):
         return self.username
@@ -47,15 +36,6 @@ class User(AbstractUser):
         db_table = "tb_users"
         verbose_name = "用户"
         verbose_name_plural = verbose_name
-
-
-# class UserManager(UserManager):
-#     def create_superuser(self, username, email, password, **extra_fields):
-#         user = super().create_superuser(username, email, password, **extra_fields)
-#         user.system_role = "super_user"
-#         # group = Group.objects.get(pk=1)
-#         # group.user_set.add(user)
-#         return user
 
 
 class Project(BaseModel):

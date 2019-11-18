@@ -19,98 +19,6 @@ from app.utils.upload_text_utils import val_text_name, get_text_str, val_text_fo
 from .models import User, Project, ProjectUser, Document, Label, Annotation, Algorithm
 
 
-class CreateUserSerializer(serializers.ModelSerializer):
-    """创建用户的序列化器"""
-    password2 = serializers.CharField(label='确认密码', write_only=True)
-    phone_number = serializers.CharField(label="手机号")
-    token = serializers.CharField(label='JWT token', read_only=True)
-
-    class Meta:
-        model = User
-        fields = ('id', 'username', 'password', 'password2', "phone_number", "token", "email")
-        extra_kwargs = {
-            'username': {
-                'min_length': 3,
-                'max_length': 20,
-                'error_messages': {
-                    'min_length': '仅允许3-20个字符的用户名',
-                    'max_length': '仅允许3-20个字符的用户名',
-                }
-            },
-            'password': {
-                'write_only': True,
-                'min_length': 6,
-                'max_length': 20,
-                'error_messages': {
-                    'min_length': '仅允许6-20个字符的密码',
-                    'max_length': '仅允许6-20个字符的密码',
-                }
-            }
-        }
-
-    def validate_phone_number(self, value):
-        """验证手机号"""
-        print("*****************")
-        if not re.match(r'^1[3-9]\d{9}$', value):
-            raise serializers.ValidationError('手机号格式错误')
-        return value
-
-    def validate(self, data):
-        # 判断两次密码
-        if data['password'] != data['password2']:
-            raise serializers.ValidationError('两次密码不一致')
-        phone_number = data["phone_number"]
-        username = data["username"]
-        exsist_user = User.objects.filter(phone_number=phone_number, username=username)
-        if not exsist_user:
-            if User.objects.filter(phone_number=phone_number):
-                raise serializers.ValidationError('手机号已存在')
-        return data
-
-    def create(self, validated_data):
-        """重写保存方法，增加密码加密"""
-        # 移除数据库模型类中不存在的属性
-        del validated_data['password2']
-        phone_number = validated_data["phone_number"]
-        username = validated_data["username"]
-        exsist_user = User.objects.filter(phone_number=phone_number, username=username)
-        if exsist_user:
-            exsist_user.is_delete = False
-            return exsist_user
-        user = super().create(validated_data)
-        user.set_password(validated_data['password'])
-        user.save()
-        # 签发jwt token
-        jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
-        jwt_encode_handler = api_settings.JWT_ENCODE_HANDLER
-
-        payload = jwt_payload_handler(user)
-        token = jwt_encode_handler(payload)
-
-        user.token = token
-        return user
-
-
-# class UpdateOtherUserSerializer(serializers.ModelSerializer):
-#     username = serializers.CharField(read_only=True)
-#     phone_number = serializers.CharField(read_only=True)
-#
-#     class Meta:
-#         model = User
-#         fields = ('id', 'username', "phone_number")
-#
-#     def validate(self, data):
-#         # user = self.context["request"].user
-#         operated_user_id = self.context["view"].kwargs["pk"]
-#         if operated_user_id:
-#             if User.objects.get(pk=operated_user_id).system_role == "super_user":
-#                 raise PermissionDenied("无法创建或修改超级管理员用户")
-#             else:
-#                 return data
-#         else:
-#             return data
-
-
 class UpdateSelfSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -342,32 +250,6 @@ class AnnotationSerializer(serializers.ModelSerializer):
                         transaction.savepoint_rollback(save_id)
                         continue
 
-            #         try:
-            #             annotation = Annotation.objects.create(start_offset=start_offset, end_offset=end_offset,
-            #                                                    document_id=document.id,
-            #                                                    annoted_by=annoted_by, manual=True)
-            #             return annotation
-            #         except Exception:
-            #             annotation = Annotation.objects.filter(start_offset=start_offset, end_offset=end_offset,
-            #                                                    document_id=document.id)
-            #             if annotation:
-            #                 result = Annotation.objects.filter(start_offset=start_offset, end_offset=end_offset,
-            #                                                    document_id=document.id,
-            #                                                    annoted_by=annotation.annoted_by).update(
-            #                     label=label,
-            #                     annoted_by=annoted_by,
-            #                     manual=True)
-            #                 if result:
-            #                     return Annotation(start_offset=start_offset, end_offset=end_offset,
-            #                                       document_id=document.id, annoted_by=annoted_by, label=label,
-            #                                       manual=True)
-            #                 else:
-            #                     transaction.rollback(save_id)
-            #             else:
-            #                 continue
-            # except:
-            #     transaction.rollback(save_id)
-
 
 class DocumentSerializer(serializers.ModelSerializer):
     text_upload = serializers.FileField(write_only=True)
@@ -400,62 +282,6 @@ class DocumentSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError('文件已存在，请勿重复上传')
             attrs["text"] = text_str
             return attrs
-        # else:
-        #     file_list = self.context["request"].FILES.getlist('text_upload')
-        #     if len(file_list)==0:
-        #         raise serializers.ValidationError("未上传文件")
-        #     wrong_count = 0
-        #     right_file_list = []
-        #     for text in file_list:
-        #         text_dict = {}
-        #         try:
-        #             title =val_text_name(text.name)
-        #             text_dict["title"] = title
-        #         except:
-        #             # raise serializers.ValidationError("文件名有误")
-        #             wrong_count += 1
-        #             continue
-        #         text_str = get_text_str(text)
-        #         try:
-        #             val_text_format(text, text_str)
-        #         except:
-        #             # raise serializers.ValidationError("格式有误")
-        #             wrong_count += 1
-        #             continue
-        #         if Document.objects.filter(text=text_str).count():
-        #             # raise serializers.ValidationError('文件已存在，请勿重复上传')
-        #             wrong_count += 1
-        #             continue
-        #         text_dict["text"] = text_str
-        #         right_file_list.append(text_dict)
-        #     attrs["file_list"] = right_file_list
-        #     return attrs
-
-    # def val_text_name(self,name):
-    #     if not (name.endswith(".txt") or name.endswith(".json")):
-    #         raise serializers.ValidationError('文件格式有误，请上传.txt格式文件，或json格式文件')
-    #     try:
-    #         title = re.match(r"(.*?)\.(.*?)", name).group(1)
-    #     except:
-    #         raise serializers.ValidationError("文件名有误")
-    #     else:
-    #         return title
-    #
-    # def get_text_str(self,text):
-    #     text_str = ""
-    #     for chunk in text.chunks():
-    #         text_str += chunk.decode("utf-8").strip()
-    #     return text_str
-    #
-    # def val_text_format(self,text,text_str):
-    #     if text.name.endswith(".json"):
-    #         try:
-    #             text_dict = json.loads(text_str)
-    #         except:
-    #             raise serializers.ValidationError("文本格式有误")
-    #         # TODO
-    #         text_str = text_dict.get("文书内容", None)
-    #     return text_str
 
     def create(self, validated_data):
         del validated_data["text_upload"]
@@ -500,11 +326,9 @@ class CreateMultiDocument(serializers.ModelSerializer):
             try:
                 val_text_format(text, text_str)
             except:
-                # raise serializers.ValidationError("格式有误")
                 wrong_count += 1
                 continue
             if Document.objects.filter(text=text_str).count():
-                # raise serializers.ValidationError('文件已存在，请勿重复上传')
                 wrong_count += 1
                 continue
             text_dict["text"] = text_str
@@ -514,15 +338,10 @@ class CreateMultiDocument(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        # del validated_data["text_upload"]
-        # del validated_data["is_multitext"]
         wrong_count = validated_data["wrong_count"]
-        # del validated_data["wrong_count"]
         file_list = validated_data["file_list"]
-        # del validated_data["file_list"]
         project_id = self.context["view"].kwargs["project_id"]
         project = Project.objects.get(pk=int(project_id))
-        # validated_data["project"] = project
         data = {}
         doc_list = []
         for file in file_list:
@@ -547,10 +366,10 @@ class ProjectSerializer(serializers.ModelSerializer):
         model = Project
         fields = (
             'id', 'name', "description", "project_type", "randomize_document_order", "update_time", "count",
-            "pic","labels")
+            "pic", "labels")
 
     def validate(self, attrs):
-        picture = attrs.get("pic",None)
+        picture = attrs.get("pic", None)
         if picture:
             picture.name = str(int(time.time())) + "." + picture.name.split(".")[1]
             attrs["pic"] = picture
@@ -558,7 +377,6 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 
 class SubProjectSerializer(serializers.ModelSerializer):
-    # id = serializers.IntegerField()
     name = serializers.CharField(read_only=True)
     description = serializers.CharField(read_only=True)
 
@@ -613,6 +431,91 @@ class ProjectUserSerializer(serializers.ModelSerializer):
         project_user = ProjectUser(project=project, user=operated_user, role=role)
         project_user.save()
         return project_user
+
+
+#
+class UserInMultiProjects(serializers.ModelSerializer):
+    """用户所在项目序列化器"""
+    project = SubProjectSerializer(read_only=True)
+
+    class Meta:
+        model = ProjectUser
+        fields = ("id", "project", "project_id", "role")
+
+
+class CreateUserSerializer(serializers.ModelSerializer):
+    """创建用户的序列化器"""
+    password2 = serializers.CharField(label='确认密码', write_only=True)
+    phone_number = serializers.CharField(label="手机号")
+    token = serializers.CharField(label='JWT token', read_only=True)
+    is_superuser = serializers.BooleanField(read_only=True)
+    projectuser_set = UserInMultiProjects(many=True, read_only=True)
+
+    class Meta:
+        model = User
+        fields = (
+        'id', 'username', 'password', 'password2', "phone_number", "token", "email", "is_superuser", "projectuser_set")
+        extra_kwargs = {
+            'username': {
+                'min_length': 3,
+                'max_length': 20,
+                'error_messages': {
+                    'min_length': '仅允许3-20个字符的用户名',
+                    'max_length': '仅允许3-20个字符的用户名',
+                }
+            },
+            'password': {
+                'write_only': True,
+                'min_length': 6,
+                'max_length': 20,
+                'error_messages': {
+                    'min_length': '仅允许6-20个字符的密码',
+                    'max_length': '仅允许6-20个字符的密码',
+                }
+            }
+        }
+
+    def validate_phone_number(self, value):
+        """验证手机号"""
+        print("*****************")
+        if not re.match(r'^1[3-9]\d{9}$', value):
+            raise serializers.ValidationError('手机号格式错误')
+        return value
+
+    def validate(self, data):
+        # 判断两次密码
+        if data['password'] != data['password2']:
+            raise serializers.ValidationError('两次密码不一致')
+        phone_number = data["phone_number"]
+        username = data["username"]
+        exsist_user = User.objects.filter(phone_number=phone_number, username=username)
+        if not exsist_user:
+            if User.objects.filter(phone_number=phone_number):
+                raise serializers.ValidationError('手机号已存在')
+        return data
+
+    def create(self, validated_data):
+        """重写保存方法，增加密码加密"""
+        # 移除数据库模型类中不存在的属性
+        del validated_data['password2']
+        phone_number = validated_data["phone_number"]
+        username = validated_data["username"]
+        exsist_user = User.objects.filter(phone_number=phone_number, username=username)
+        if exsist_user:
+            exsist_user.is_delete = False
+            return exsist_user
+        user = super().create(validated_data)
+        user.set_password(validated_data['password'])
+        user.save()
+        # 签发jwt token
+        jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
+        jwt_encode_handler = api_settings.JWT_ENCODE_HANDLER
+
+        payload = jwt_payload_handler(user)
+        token = jwt_encode_handler(payload)
+
+        user.token = token
+        return user
 
 
 class UsersInProjectSerializer(serializers.ModelSerializer):
