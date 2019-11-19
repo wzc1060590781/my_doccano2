@@ -3,6 +3,7 @@ from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 # from rest_framework import status
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import GenericAPIView, CreateAPIView, UpdateAPIView
@@ -13,6 +14,7 @@ from rest_framework.views import APIView
 from api.serializers import ResetPasswordSerializer
 from app.utils.Viewset import ApiModelViewSet
 from app.utils.celery_function import generate_verify_email_url, check_verify_email_token
+from app.utils.filter import UserFilter
 from celery_tasks.email.tasks import send_find_password_email
 from .models import User, Project, Document, ProjectUser, Algorithm
 from . import serializers
@@ -27,7 +29,9 @@ class UserView(ApiModelViewSet):
     # permission_classes = [IsAuthenticated, UserOperationPermission]
     serializer_class = serializers.CreateUserSerializer
     queryset = User.objects.filter(is_delete=False)
-    filter_fields = ("username",)
+    filter_backends = [DjangoFilterBackend]
+    filter_class = UserFilter
+    filter_fields = ("username","project")
 
     def get_serializer_class(self):
         if self.action == "update":

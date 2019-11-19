@@ -3,7 +3,7 @@ from rest_framework_jwt.views import obtain_jwt_token
 from . import views
 urlpatterns = [
     url(r'^users$', views.UserView.as_view({'get': 'list'})),
-    url(r'^register/$', views.CreateUserView.as_view({"post":"create"})),
+    url(r'^register$', views.CreateUserView.as_view({"post":"create"})),
     url(r'^users/(?P<pk>\d+)$',
         views.UserView.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'})),
     url(r'^authorizations$', obtain_jwt_token),
