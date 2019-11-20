@@ -11,6 +11,7 @@ from rest_framework.generics import GenericAPIView, CreateAPIView, UpdateAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_jwt.views import ObtainJSONWebToken
 
 from api.serializers import ResetPasswordSerializer
 from app.utils.Viewset import ApiModelViewSet
@@ -22,6 +23,68 @@ from . import serializers
 from .permissions import ProjectOperationPermission, DocumentOperationPermission, LabelOperationPermission, \
     AnnotationOperationPermission, ProjectUserPermission, UserOperationPermission
 
+
+class UsernameCountView(APIView):
+    """
+    用户名数量
+    """
+    def get(self, request, username):
+        """
+        获取指定用户名数量
+        """
+        count = User.objects.filter(username=username).count()
+        data = {
+            "status":200,
+            "message":"请求成功",
+            'username': username,
+            'count': count
+        }
+        return Response(data)
+
+class MobileCountView(APIView):
+    """
+    手机号数量
+    """
+    def get(self, request, phone_number):
+        """
+        获取指定手机号数量
+        """
+        count = User.objects.filter(phone_number=phone_number).count()
+        data = {
+            "status": 200,
+            "message": "请求成功",
+            'phone_number': phone_number,
+            'count': count
+        }
+        return Response(data)
+
+class EamilCountView(APIView):
+    """
+    手机号数量
+    """
+    def get(self, request, email):
+        """
+        获取指定手机号数量
+        """
+        count = User.objects.filter(phone_number=email).count()
+        data = {
+            "status": 200,
+            "message": "请求成功",
+            'email': email,
+            'count': count
+        }
+        return Response(data)
+
+class UserAuthorizeView(ObtainJSONWebToken):
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        if response.status == 400:
+            response = {
+                "status": 200,
+                "success": True,
+                "message": "用户名和密码不匹配",
+            }
+            return
 
 class UserView(ApiModelViewSet):
     """
