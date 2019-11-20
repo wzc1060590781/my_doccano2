@@ -2,6 +2,10 @@ import string
 
 from django.contrib.auth.models import AbstractUser, Group, UserManager
 from django.db import models
+from itsdangerous import TimedJSONWebSignatureSerializer,BadData
+
+from api import constants
+from app import settings
 
 DOCUMENT_CLASSIFICATION = 'DocumentClassification'
 SEQUENCE_LABELING = 'SequenceLabeling'
@@ -36,6 +40,25 @@ class User(AbstractUser):
         db_table = "tb_users"
         verbose_name = "用户"
         verbose_name_plural = verbose_name
+
+    @staticmethod
+    def check_verify_email_token(token):
+        serializer = TimedJSONWebSignatureSerializer(settings.SECRET_KEY, expires_in=constants.VERIFY_EMAIL_TOKEN_EXPIRES)
+        try:
+            data = serializer.loads(token)
+        except BadData:
+            return None
+        else:
+            user_id = data['user_id']
+            email = data['email']
+            try:
+                user = User.objects.get(id=user_id, email=email)
+            except User.DoesNotExist:
+                return None
+            else:
+                return user
+
+
 
 
 class Project(BaseModel):

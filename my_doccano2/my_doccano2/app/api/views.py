@@ -1,3 +1,4 @@
+from django.contrib.auth.decorators import permission_required
 from django.core.mail import send_mail
 from django.db import transaction
 from django.http import Http404
@@ -13,20 +14,20 @@ from rest_framework.views import APIView
 
 from api.serializers import ResetPasswordSerializer
 from app.utils.Viewset import ApiModelViewSet
-from app.utils.celery_function import generate_verify_email_url, check_verify_email_token
+from app.utils.celery_function import generate_verify_email_url
 from app.utils.filter import UserFilter
 from celery_tasks.email.tasks import send_find_password_email
 from .models import User, Project, Document, ProjectUser, Algorithm
 from . import serializers
-from .permissions import ProjectOperationPermission, DocumentOperationPermission, LabelOperationPermission, AnnotationOperationPermission, ProjectUserPermission
+from .permissions import ProjectOperationPermission, DocumentOperationPermission, LabelOperationPermission, \
+    AnnotationOperationPermission, ProjectUserPermission, UserOperationPermission
 
 
 class UserView(ApiModelViewSet):
     """
-    list:
-    返回用户列表
+    用户的列表，修改账户信息
     """
-    # permission_classes = [IsAuthenticated, UserOperationPermission]
+    permission_classes = [IsAuthenticated]
     serializer_class = serializers.CreateUserSerializer
     queryset = User.objects.filter(is_delete=False)
     filter_backends = [DjangoFilterBackend]
@@ -39,19 +40,33 @@ class UserView(ApiModelViewSet):
         else:
             return serializers.CreateUserSerializer
 
+    def update(self, request, *args, **kwargs):
+
+        if self.kwargs["pk"] == str(request.user.id):
+            kwargs["partial"] = True
+            return super().update(request, *args, **kwargs)
+        else:
+            raise PermissionDenied("没有权限修改其他用信息")
+
     def destroy(self, request, *args, **kwargs):
         instance = get_object_or_404(User, pk=self.kwargs['pk'])
-        if instance.is_superuser:
-            raise PermissionDenied("不可删除超级管理员")
+        if instance.is_superuser or not request.user.is_superuser:
+            data = {}
+            data["status"] = status.HTTP_403_FORBIDDEN
+            data["success"] = False
+            data["message"] = "没有删除该用户权限"
+            return Response(data,status=status.HTTP_403_FORBIDDEN)
         instance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CreateUserView(ApiModelViewSet):
+    """注册用户"""
     serializer_class = serializers.CreateUserSerializer
 
 
 class ChangePasswordView(ApiModelViewSet):
+    """修改密码"""
     permission_classes = [IsAuthenticated]
     serializer_class = serializers.ChangePasswordSerializer
 
@@ -340,38 +355,58 @@ class SendEmail(GenericAPIView):
                 "message": "发送成功"
             }, status=status.HTTP_200_OK)
 
-    def get(self, request):
-        token = request.query_params.get("token", None)
+class VerifyToken(GenericAPIView):
+    def post(self,request):
+        token = request.data["token"]
         if not token:
-            raise Http404
+            response_data = {
+                "status":400,
+                "success":False,
+                "message":"缺少token"
+            }
         else:
-            user = check_verify_email_token(token)
+            user = User.check_verify_email_token(token)
             if user:
-                return Response({
+                response_data = {
                     "status": 200,
                     "success": True,
                     "message": "验证成功",
-                    "data": {
-                        "id": user.id,
-                        "email": user.email,
-                        "token": token
+                    "data":{
+                        "id":user.id,
+                        "email":user.email,
+                        "token":token
                     }
-                }, status=status.HTTP_200_OK)
-
+                }
+            else:
+                response_data = {
+                    "status": 400,
+                    "success": False,
+                    "message": "token有误或已过期"
+                }
+        return Response(response_data,status=response_data["status"])
 
 class ResetPassword(UpdateAPIView):
     serializer_class = ResetPasswordSerializer
 
-    def get_queryset(self):
-        return User.objects.all()
+    # def get_queryset(self):
+    #     return User.objects.all()
 
+    #  TODO
     def put(self, request, *args, **kwargs):
+        token = request.data.get('token')
+        if not token:
+            return Response({'message': '缺少token'}, status=status.HTTP_400_BAD_REQUEST)
         user_id = request.data.get("id", None)
         instance = User.objects.get(pk=user_id)
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serializer.data)
+        response_data={}
+        response_data["status"] = 200
+        response_data["success"] = True
+        response_data["message"] = "修改成功"
+        response_data["data"] = serializer.data
+        return Response(response_data,status=status.HTTP_200_OK)
 
 
 class StatisticView(APIView):

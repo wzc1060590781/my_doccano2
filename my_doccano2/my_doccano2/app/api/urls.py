@@ -31,6 +31,7 @@ urlpatterns = [
         views.ChangePasswordView.as_view({"post":"create"})),
     url(r"^send_email$",views.SendEmail.as_view()),
     url(r"^reset_password$",views.ResetPassword.as_view()),
+    url(r"^verify_token$",views.VerifyToken.as_view()),
 ]
 
 

@@ -14,7 +14,6 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework_jwt.settings import api_settings
 
 from app import settings
-from app.utils.celery_function import check_verify_email_token
 from app.utils.upload_text_utils import val_text_name, get_text_str, val_text_format
 from .models import User, Project, ProjectUser, Document, Label, Annotation, Algorithm
 
@@ -22,7 +21,7 @@ from .models import User, Project, ProjectUser, Document, Label, Annotation, Alg
 class UpdateSelfSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ('id', 'username', "phone_number")
+        fields = ('id', 'username', "phone_number","email")
         extra_kwargs = {
             'username': {
                 'min_length': 3,
@@ -49,14 +48,15 @@ class ResetPasswordSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(write_only=True)
     phone_number = serializers.CharField(read_only=True)
     token = serializers.CharField(write_only=True)
+    email = serializers.CharField()
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'password', 'password2', "phone_number", "token")
+        fields = ('id', 'username', 'password', 'password2', "phone_number", "token","email")
 
     def validate(self, attrs):
         token = attrs["token"]
-        user = check_verify_email_token(token)
+        user = User.check_verify_email_token(token)
         if user:
             if user.id != attrs["id"]:
                 raise serializers.ValidationError("token和用户信息不匹配")
@@ -68,9 +68,9 @@ class ResetPasswordSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("token有误")
 
     def update(self, instance, validated_data):
-        del validated_data["id"]
-        del validated_data["password2"]
-        del validated_data["token"]
+        # del validated_data["id"]
+        # del validated_data["password2"]
+        # del validated_data["token"]
         instance.set_password(validated_data["password"])
         instance.save()
         return instance
