@@ -1,5 +1,8 @@
+import base64
+import datetime
 import json
 import os
+import pickle
 import re
 import time
 
@@ -662,11 +665,17 @@ class AddDocumentOperatingHistorySerializer(serializers.Serializer):
 
     def create(self, validated_data):
         # sku_id
+        #TODO
         doc_id = validated_data['doc_id']
-
+        datetime_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        dict = {}
+        dict["doc_id"] = doc_id
+        dict["operation"] = validated_data["operation"]
+        dict["datetime"] = datetime_str
         # user_id
+        cart_pickle = pickle.dumps(dict)
+        str = base64.b64encode(cart_pickle).decode()
         user = self.context['request'].user
-
         # redis  [6, 1,2,3,4,5]
         redis_conn = get_redis_connection('history')
         pl = redis_conn.pipeline()
@@ -676,7 +685,7 @@ class AddDocumentOperatingHistorySerializer(serializers.Serializer):
         pl.lrem(redis_key, 0, doc_id)
 
         # 保存 增加
-        pl.lpush(redis_key, doc_id)
+        pl.lpush(redis_key, str)
 
         # 截断
         pl.ltrim(redis_key, 0, constants.USER_BROWSE_HISTORY_MAX_LIMIT - 1)
