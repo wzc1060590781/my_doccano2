@@ -157,7 +157,7 @@ class Label(BaseModel):
     SUFFIX_KEYS = tuple(
         (c, c) for c in string.ascii_lowercase
     )
-    text = models.CharField(max_length=100)
+    text = models.CharField(max_length=20)
     background_color = models.CharField(max_length=7, default='#209cee')
     project = models.ForeignKey(Project, related_name='labels', on_delete=models.CASCADE)
     prefix_key = models.CharField(max_length=10, blank=True, null=True, choices=PREFIX_KEYS)

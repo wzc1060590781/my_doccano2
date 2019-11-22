@@ -21,7 +21,7 @@ from .models import User, Project, ProjectUser, Document, Label, Annotation, Alg
 class UpdateSelfSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ('id', 'username', "phone_number","email")
+        fields = ('id', 'username', "phone_number", "email")
         extra_kwargs = {
             'username': {
                 'min_length': 3,
@@ -52,7 +52,7 @@ class ResetPasswordSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'password', 'password2', "phone_number", "token","email")
+        fields = ('id', 'username', 'password', 'password2', "phone_number", "token", "email")
 
     def validate(self, attrs):
         token = attrs["token"]
@@ -68,9 +68,6 @@ class ResetPasswordSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("token有误")
 
     def update(self, instance, validated_data):
-        # del validated_data["id"]
-        # del validated_data["password2"]
-        # del validated_data["token"]
         instance.set_password(validated_data["password"])
         instance.save()
         return instance
@@ -174,10 +171,10 @@ class LabelSerializer(serializers.ModelSerializer):
 class SubLabelSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField()
     text = serializers.CharField(read_only=True)
-
+    background_color = serializers.CharField(read_only=True)
     class Meta:
         model = Label
-        fields = ["id", "text"]
+        fields = ["id", "text","background_color"]
 
 
 class AnnotationSerializer(serializers.ModelSerializer):
@@ -208,6 +205,15 @@ class AnnotationSerializer(serializers.ModelSerializer):
         document = Document.objects.get(pk=int(document_id))
         if end_offset > len(document.text):
             raise serializers.ValidationError("结束下标不得超出文本长度")
+        for annotation in document.annotations.all():
+            if start_offset == annotation.start_offset or start_offset == annotation.end_offset or end_offset == annotation.start_offset or end_offset == annotation.end_offset:
+                raise  serializers.ValidationError("开始下标或结束下标与已打标签重合")
+            if start_offset > annotation.start_offset and start_offset < annotation.end_offset:
+                raise serializers.ValidationError("开始下标与已打标签重合")
+            elif end_offset > annotation.start_offset and end_offset < annotation.end_offset:
+                raise serializers.ValidationError("结束下标与已打标签重合")
+            elif start_offset < annotation.start_offset and end_offset>annotation.end_offset:
+                raise serializers.ValidationError("标签包含已打标签")
         attrs["document"] = document
         return attrs
 
@@ -454,7 +460,8 @@ class CreateUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
-        'id', 'username', 'password', 'password2', "phone_number", "token", "email", "is_superuser", "projectuser_set")
+            'id', 'username', 'password', 'password2', "phone_number", "token", "email", "is_superuser",
+            "projectuser_set")
         extra_kwargs = {
             'username': {
                 'min_length': 3,

@@ -19,7 +19,7 @@ def send_find_password_email(to_email, verify_url):
     html_message = '<p>尊敬的用户您好！</p>' \
                    '<p>感谢您使用打标签平台。</p>' \
                    '<p>您的邮箱为：%s 。请点击此链接找回密码：</p>' \
-                   '<p><a href="%s">%s<a></p>' % (to_email, verify_url, verify_url)
+                   '<p><a href="%s">%s<a></p>' % (to_email, verify_url, "点击此处重置密码")
     mail_info = {
         "from": "wzc18220844786@163.com",
         "to": to_email,

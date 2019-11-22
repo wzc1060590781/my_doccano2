@@ -77,14 +77,17 @@ class EamilCountView(APIView):
 
 class UserAuthorizeView(ObtainJSONWebToken):
     def post(self, request, *args, **kwargs):
+
         response = super().post(request, *args, **kwargs)
-        if response.status == 400:
+        if response.status_code == 400:
             response = {
-                "status": 200,
-                "success": True,
+                "status": 400,
+                "success": False,
                 "message": "用户名和密码不匹配",
             }
-            return
+            return Response(response,status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return response
 
 class UserView(ApiModelViewSet):
     """
@@ -104,12 +107,11 @@ class UserView(ApiModelViewSet):
             return serializers.CreateUserSerializer
 
     def update(self, request, *args, **kwargs):
-
         if self.kwargs["pk"] == str(request.user.id):
             kwargs["partial"] = True
             return super().update(request, *args, **kwargs)
         else:
-            raise PermissionDenied("没有权限修改其他用信息")
+            raise PermissionDenied("没有权限修改其他用户信息")
 
     def destroy(self, request, *args, **kwargs):
         instance = get_object_or_404(User, pk=self.kwargs['pk'])
