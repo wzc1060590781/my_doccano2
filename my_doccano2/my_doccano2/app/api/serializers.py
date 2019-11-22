@@ -7,12 +7,14 @@ from django.contrib.auth.hashers import check_password
 
 from django.db import transaction
 from django.db.models import Q
+from django_redis import get_redis_connection
 
 from rest_framework import serializers
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_jwt.settings import api_settings
 
+from api import constants
 from app import settings
 from app.utils.upload_text_utils import val_text_name, get_text_str, val_text_format
 from .models import User, Project, ProjectUser, Document, Label, Annotation, Algorithm
@@ -479,6 +481,14 @@ class CreateUserSerializer(serializers.ModelSerializer):
                     'min_length': '仅允许6-20个字符的密码',
                     'max_length': '仅允许6-20个字符的密码',
                 }
+            },
+            'phone_number': {
+                'min_length': 11,
+                'max_length': 11,
+                'error_messages': {
+                    'min_length': '手机号必须为11位',
+                    'max_length': '手机号必须为11位',
+                }
             }
         }
 
@@ -495,10 +505,13 @@ class CreateUserSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('两次密码不一致')
         phone_number = data["phone_number"]
         username = data["username"]
-        exsist_user = User.objects.filter(phone_number=phone_number, username=username)
-        if not exsist_user:
-            if User.objects.filter(phone_number=phone_number):
-                raise serializers.ValidationError('手机号已存在')
+        email= data["email"]
+        if User.objects.filter(username=username):
+            raise serializers.ValidationError('用户名已存在')
+        elif User.objects.filter(phone_number=phone_number):
+            raise serializers.ValidationError('手机号已存在')
+        elif User.objects.filter(email=email):
+            raise serializers.ValidationError('邮箱已存在')
         return data
 
     def create(self, validated_data):
@@ -633,3 +646,40 @@ class UpdateAlgorithmSerializer(serializers.ModelSerializer):
         attrs["code_url"] = os.path.join(settings.MEDIA_ROOT, f.name)
         attrs["model_url"] = os.path.join(file_path[:-3], f.name)
         return attrs
+
+class AddDocumentOperatingHistorySerializer(serializers.Serializer):
+    doc_id = serializers.IntegerField(label="文本id", min_value=1)
+    def validate_sku_id(self, value):
+        """
+        检验sku_id是否存在
+        """
+        try:
+            Document.objects.get(id=value)
+        except Document.DoesNotExist:
+            raise serializers.ValidationError('该文本不存在')
+        return value
+
+
+    def create(self, validated_data):
+        # sku_id
+        doc_id = validated_data['doc_id']
+
+        # user_id
+        user = self.context['request'].user
+
+        # redis  [6, 1,2,3,4,5]
+        redis_conn = get_redis_connection('history')
+        pl = redis_conn.pipeline()
+
+        redis_key = 'history_%s' % user.id
+        # 去重
+        pl.lrem(redis_key, 0, doc_id)
+
+        # 保存 增加
+        pl.lpush(redis_key, doc_id)
+
+        # 截断
+        pl.ltrim(redis_key, 0, constants.USER_BROWSE_HISTORY_MAX_LIMIT - 1)
+
+        pl.execute()
+        return validated_data

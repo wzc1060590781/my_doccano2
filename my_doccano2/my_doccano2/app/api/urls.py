@@ -36,6 +36,7 @@ urlpatterns = [
     url(r"^send_email$",views.SendEmail.as_view()),
     url(r"^reset_password$",views.ResetPassword.as_view()),
     url(r"^verify_token$",views.VerifyToken.as_view()),
+    url(r"^operate_historys$",views.DocumentOperatingHistoryView.as_view()),
 ]
 
 

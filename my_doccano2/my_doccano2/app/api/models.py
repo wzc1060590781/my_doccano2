@@ -26,8 +26,9 @@ class BaseModel(models.Model):
 
 
 class User(AbstractUser):
-    phone_number = models.CharField(max_length=11, null=True, verbose_name="手机号")
+    phone_number = models.CharField(max_length=11, null=True, verbose_name="手机号",unique=True)
     is_delete = models.BooleanField(default=False)
+    email = models.EmailField(unique=True, blank=False)
 
     def __str__(self):
         return self.username
@@ -57,7 +58,6 @@ class User(AbstractUser):
                 return None
             else:
                 return user
-
 
 
 

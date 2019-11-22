@@ -5,6 +5,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 # from rest_framework import status
 from django_filters.rest_framework import DjangoFilterBackend
+from django_redis import get_redis_connection
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import GenericAPIView, CreateAPIView, UpdateAPIView
@@ -13,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_jwt.views import ObtainJSONWebToken
 
+from api import constants
 from api.serializers import ResetPasswordSerializer
 from app.utils.Viewset import ApiModelViewSet
 from app.utils.celery_function import generate_verify_email_url
@@ -77,7 +79,6 @@ class EamilCountView(APIView):
 
 class UserAuthorizeView(ObtainJSONWebToken):
     def post(self, request, *args, **kwargs):
-
         response = super().post(request, *args, **kwargs)
         if response.status_code == 400:
             response = {
@@ -472,6 +473,37 @@ class ResetPassword(UpdateAPIView):
         response_data["message"] = "修改成功"
         response_data["data"] = serializer.data
         return Response(response_data,status=status.HTTP_200_OK)
+
+class DocumentOperatingHistoryView(CreateAPIView):
+    """
+    用户操作历史记录
+    """
+    serializer_class = serializers.AddDocumentOperatingHistorySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # user_id
+        user_id = request.user.id
+        # 查询redis  list
+        redis_conn = get_redis_connection('history')
+        doc_id_list = redis_conn.lrange('history_%s' % user_id, 0, constants.USER_BROWSE_HISTORY_MAX_LIMIT)
+        docs = []
+        for doc_id in doc_id_list:
+            doc = Document.objects.get(id=doc_id)
+            docs.append(doc)
+        # 序列化 返回
+        serializer = serializers.DocumentSerializer(docs, many=True)
+        return Response(serializer.data)
+
+    def create(self, request, *args, **kwargs):
+        response = super().create(request,*args,**kwargs)
+        response.data["code"] = status.HTTP_201_CREATED
+        response.data["success"] = True
+        response.data["message"] = "添加成功"
+        response.data["data"] = {}
+        response.data["data"]["doc_id"] = response.data["doc_id"]
+        del response.data["doc_id"]
+        return response
 
 
 class StatisticView(APIView):
