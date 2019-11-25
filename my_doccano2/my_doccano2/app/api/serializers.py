@@ -652,43 +652,60 @@ class UpdateAlgorithmSerializer(serializers.ModelSerializer):
 
 class AddDocumentOperatingHistorySerializer(serializers.Serializer):
     doc_id = serializers.IntegerField(label="文本id", min_value=1)
-    def validate_sku_id(self, value):
+    operation = serializers.CharField()
+    datetime = serializers.DateTimeField(read_only=True)
+    title = serializers.CharField(read_only=True)
+    project_name = serializers.CharField(read_only=True)
+    project_url = serializers.CharField(read_only=True)
+    doc_url = serializers.CharField(read_only=True)
+    def validate_doc_id(self, value):
         """
         检验sku_id是否存在
         """
         try:
-            Document.objects.get(id=value)
+            doc = Document.objects.get(id=value)
         except Document.DoesNotExist:
             raise serializers.ValidationError('该文本不存在')
         return value
 
 
     def create(self, validated_data):
-        # sku_id
         #TODO
         doc_id = validated_data['doc_id']
+        doc = Document.objects.get(id=doc_id)
+        validated_data["text"] = doc.text
         datetime_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        validated_data["datetime"] = datetime_str
         dict = {}
-        dict["doc_id"] = doc_id
+        dict["doc_id"] = validated_data["doc_id"]
         dict["operation"] = validated_data["operation"]
         dict["datetime"] = datetime_str
-        # user_id
         cart_pickle = pickle.dumps(dict)
         str = base64.b64encode(cart_pickle).decode()
         user = self.context['request'].user
-        # redis  [6, 1,2,3,4,5]
         redis_conn = get_redis_connection('history')
         pl = redis_conn.pipeline()
-
-        redis_key = 'history_%s' % user.id
         # 去重
-        pl.lrem(redis_key, 0, doc_id)
-
-        # 保存 增加
-        pl.lpush(redis_key, str)
-
-        # 截断
-        pl.ltrim(redis_key, 0, constants.USER_BROWSE_HISTORY_MAX_LIMIT - 1)
-
+        redis_key = 'history_%s' % user.id
+        if redis_conn.hlen(redis_key) < constants.USER_BROWSE_HISTORY_MAX_LIMIT:
+            pl.hset(redis_key,doc_id,str)
+            pl.execute()
+            return validated_data
+        else:
+            if pl.exists(redis_key,doc_id):
+                pl.hset(redis_key, str)
+                pl.execute()
+                return validated_data
+            else:
+                dict_list = []
+                for item in pl.scan_iter():
+                    dict = {}
+                    dict["doc_id"] = item[0].decode("utf-8")
+                    dict["time"] = pickle.loads(base64.b64decode(item[1]))["time"]
+                    dict["operation"] = pickle.loads(base64.b64decode(item[1]))["operation"]
+                    dict_list.append(dict)
+                sorted_list = sorted(dict_list,key=lambda  x:x["time"])
+                pl.hdel(sorted_list[-1])
+                pl.hset(redis_key, str)
         pl.execute()
         return validated_data

@@ -1,3 +1,6 @@
+import base64
+import pickle
+
 from django.contrib.auth.decorators import permission_required
 from django.core.mail import send_mail
 from django.db import transaction
@@ -486,24 +489,40 @@ class DocumentOperatingHistoryView(CreateAPIView):
         user_id = request.user.id
         # 查询redis  list
         redis_conn = get_redis_connection('history')
-        doc_id_list = redis_conn.lrange('history_%s' % user_id, 0, constants.USER_BROWSE_HISTORY_MAX_LIMIT)
-        docs = []
-        for doc_id in doc_id_list:
-            doc = Document.objects.get(id=doc_id)
-            docs.append(doc)
-        # 序列化 返回
-        serializer = serializers.DocumentSerializer(docs, many=True)
-        return Response(serializer.data)
+        # doc_id_list = redis_conn.lrange('history_%s' % user_id, 0, constants.USER_BROWSE_HISTORY_MAX_LIMIT)
+        dict_list = []
+        dict = redis_conn.hgetall('history_%s'% user_id)
+        for key,value in dict.items():
+            value = pickle.loads(base64.b64decode(value))
+            dict = {}
+            doc = Document.objects.get(pk=value["doc_id"])
+            if not doc:
+                continue
+            project = doc.project
+            dict["doc_id"] = value["doc_id"]
+            dict["datetime"] = value["datetime"]
+            dict["operation"] = value["operation"]
+            dict["title"] = doc.title
+            dict["project_name"] = project.name
+            dict["project_url"] = "projects/"+str(project.id)
+            dict["doc_url"] = "/projects/"+str(project.id)+"/doc/"+str(doc.id)
+            dict_list.append(dict)
+        serializer = serializers.AddDocumentOperatingHistorySerializer(dict_list, many=True)
+        dict= {}
+        dict["code"] = status.HTTP_200_OK
+        dict["success"] = True
+        dict["message"] = "成功"
+        dict["data"] = serializer.data
+        return Response(dict,status=status.HTTP_200_OK)
 
     def create(self, request, *args, **kwargs):
         response = super().create(request,*args,**kwargs)
-        response.data["code"] = status.HTTP_201_CREATED
-        response.data["success"] = True
-        response.data["message"] = "添加成功"
-        response.data["data"] = {}
-        response.data["data"]["doc_id"] = response.data["doc_id"]
-        del response.data["doc_id"]
-        return response
+        resp = {}
+        resp["code"] = status.HTTP_201_CREATED
+        resp["success"] = True
+        resp["message"] = "添加成功"
+        resp["data"] = response.data
+        return Response(resp,status=status.HTTP_201_CREATED)
 
 
 class StatisticView(APIView):
