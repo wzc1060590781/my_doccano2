@@ -507,7 +507,8 @@ class DocumentOperatingHistoryView(CreateAPIView):
             dict["project_url"] = "projects/"+str(project.id)
             dict["doc_url"] = "/projects/"+str(project.id)+"/doc/"+str(doc.id)
             dict_list.append(dict)
-        serializer = serializers.AddDocumentOperatingHistorySerializer(dict_list, many=True)
+        sorted_list = sorted(dict_list, key=lambda x: x["datetime"],reverse=True)
+        serializer = serializers.AddDocumentOperatingHistorySerializer(sorted_list, many=True)
         dict= {}
         dict["code"] = status.HTTP_200_OK
         dict["success"] = True

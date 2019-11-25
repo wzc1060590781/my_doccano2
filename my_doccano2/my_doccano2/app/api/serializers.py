@@ -692,20 +692,18 @@ class AddDocumentOperatingHistorySerializer(serializers.Serializer):
             pl.execute()
             return validated_data
         else:
-            if pl.exists(redis_key,doc_id):
-                pl.hset(redis_key, str)
+            if redis_conn.exists(doc_id):
+                pl.hset(redis_key,doc_id,str)
                 pl.execute()
                 return validated_data
             else:
                 dict_list = []
-                for item in pl.scan_iter():
-                    dict = {}
-                    dict["doc_id"] = item[0].decode("utf-8")
-                    dict["time"] = pickle.loads(base64.b64decode(item[1]))["time"]
-                    dict["operation"] = pickle.loads(base64.b64decode(item[1]))["operation"]
+                dict = redis_conn.hgetall('history_%s' % user.id)
+                for item in dict.values():
+                    dict = pickle.loads(base64.b64decode(item))
                     dict_list.append(dict)
-                sorted_list = sorted(dict_list,key=lambda  x:x["time"])
-                pl.hdel(sorted_list[-1])
-                pl.hset(redis_key, str)
+                sorted_list = sorted(dict_list,key=lambda  x:x["datetime"])
+                pl.hdel(redis_key,sorted_list[0]["doc_id"])
+                pl.hset(redis_key,doc_id,str)
         pl.execute()
         return validated_data
