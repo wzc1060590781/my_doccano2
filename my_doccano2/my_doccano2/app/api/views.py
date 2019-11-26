@@ -491,30 +491,33 @@ class DocumentOperatingHistoryView(CreateAPIView):
         redis_conn = get_redis_connection('history')
         # doc_id_list = redis_conn.lrange('history_%s' % user_id, 0, constants.USER_BROWSE_HISTORY_MAX_LIMIT)
         dict_list = []
-        dict = redis_conn.hgetall('history_%s'% user_id)
-        for key,value in dict.items():
-            value = pickle.loads(base64.b64decode(value))
-            dict = {}
-            doc = Document.objects.get(pk=value["doc_id"])
+        doc_list = redis_conn.lrange('history_list_%s' % user_id,0,-1)
+        # user_hash = redis_conn.hgetall('history_%s' % user_id)
+        # value = pickle.loads(base64.b64decode(user_hash))
+        for doc_id in doc_list:
+            user_hash = redis_conn.hget('history_%s' % user_id,doc_id)
+            value = pickle.loads(base64.b64decode(user_hash))
+            doc = Document.objects.get(pk=doc_id)
             if not doc:
                 continue
             project = doc.project
-            dict["doc_id"] = value["doc_id"]
-            dict["datetime"] = value["datetime"]
-            dict["operation"] = value["operation"]
-            dict["title"] = doc.title
-            dict["project_name"] = project.name
-            dict["project_url"] = "projects/"+str(project.id)
-            dict["doc_url"] = "/projects/"+str(project.id)+"/doc/"+str(doc.id)
-            dict_list.append(dict)
-        sorted_list = sorted(dict_list, key=lambda x: x["datetime"],reverse=True)
-        serializer = serializers.AddDocumentOperatingHistorySerializer(sorted_list, many=True)
-        dict= {}
+            doc_dict = {}
+            doc_dict["doc_id"] = doc_id
+            doc_dict["datetime"] = value["datetime"]
+            doc_dict["operation"] = value["operation"]
+            doc_dict["title"] = doc.title
+            doc_dict["project_name"] = project.name
+            doc_dict["project_url"] = "projects/" + str(project.id)
+            doc_dict["doc_url"] = "/projects/" + str(project.id) + "/doc/" + str(doc.id)
+            dict_list.append(doc_dict)
+        serializer = serializers.AddDocumentOperatingHistorySerializer(dict_list, many=True)
+        dict = {}
         dict["code"] = status.HTTP_200_OK
         dict["success"] = True
         dict["message"] = "成功"
         dict["data"] = serializer.data
-        return Response(dict,status=status.HTTP_200_OK)
+        return Response(dict, status=status.HTTP_200_OK)
+
 
     def create(self, request, *args, **kwargs):
         response = super().create(request,*args,**kwargs)

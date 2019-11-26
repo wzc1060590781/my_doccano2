@@ -660,7 +660,7 @@ class AddDocumentOperatingHistorySerializer(serializers.Serializer):
     doc_url = serializers.CharField(read_only=True)
     def validate_doc_id(self, value):
         """
-        检验sku_id是否存在
+        检验doc是否存在
         """
         try:
             doc = Document.objects.get(id=value)
@@ -685,25 +685,13 @@ class AddDocumentOperatingHistorySerializer(serializers.Serializer):
         user = self.context['request'].user
         redis_conn = get_redis_connection('history')
         pl = redis_conn.pipeline()
-        # 去重
-        redis_key = 'history_%s' % user.id
-        if redis_conn.hlen(redis_key) < constants.USER_BROWSE_HISTORY_MAX_LIMIT:
-            pl.hset(redis_key,doc_id,str)
-            pl.execute()
-            return validated_data
-        else:
-            if redis_conn.exists(doc_id):
-                pl.hset(redis_key,doc_id,str)
-                pl.execute()
-                return validated_data
-            else:
-                dict_list = []
-                dict = redis_conn.hgetall('history_%s' % user.id)
-                for item in dict.values():
-                    dict = pickle.loads(base64.b64decode(item))
-                    dict_list.append(dict)
-                sorted_list = sorted(dict_list,key=lambda  x:x["datetime"])
-                pl.hdel(redis_key,sorted_list[0]["doc_id"])
-                pl.hset(redis_key,doc_id,str)
+        redis_hash_key = 'history_%s' % user.id
+        redis_list_key = 'history_list_%s' % user.id
+        pl.hset(redis_hash_key, doc_id, str)
+        if redis_conn.llen(doc_id) > constants.USER_OPERATE_HISTORY_MAX_LIMIT:
+            pl.hdel(pl.lindex(redis_list_key,-1))
+        pl.lrem(redis_list_key, 0, doc_id)
+        pl.lpush(redis_list_key, doc_id)
+        pl.ltrim(redis_list_key, 0, constants.USER_OPERATE_HISTORY_MAX_LIMIT - 1)
         pl.execute()
         return validated_data
