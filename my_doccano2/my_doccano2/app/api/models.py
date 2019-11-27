@@ -175,19 +175,19 @@ class Label(BaseModel):
         return self.text
 
 
-class Algorithm(BaseModel):
-    algorithm_type = models.CharField(max_length=30, choices=PROJECT_CHOICES, help_text="算法类型")
-    name = models.CharField(max_length=100, unique=True)
-    mini_quantity = models.IntegerField(null=False, verbose_name="最小训练集")
-    code_url = models.CharField(max_length=255, null=True,verbose_name="算法代码路径")
-    model_url = models.CharField(max_length=255, null=True, verbose_name="算法模型路径")
-    description = models.TextField(default="", verbose_name="算法描述")
-    is_delete = models.BooleanField(default=False, verbose_name="算法是否删除删除")
-
-    def __str__(self):
-        return self.name
-
-    def delete(self, using=None, keep_parents=False):
-        self.is_delete = True
-        self.save()
+# class Algorithm(BaseModel):
+#     algorithm_type = models.CharField(max_length=30, choices=PROJECT_CHOICES, help_text="算法类型")
+#     name = models.CharField(max_length=100, unique=True)
+#     mini_quantity = models.IntegerField(null=False, verbose_name="最小训练集")
+#     code_url = models.CharField(max_length=255, null=True,verbose_name="算法代码路径")
+#     model_url = models.CharField(max_length=255, null=True, verbose_name="算法模型路径")
+#     description = models.TextField(default="", verbose_name="算法描述")
+#     is_delete = models.BooleanField(default=False, verbose_name="算法是否删除删除")
+#
+#     def __str__(self):
+#         return self.name
+#
+#     def delete(self, using=None, keep_parents=False):
+#         self.is_delete = True
+#         self.save()
 

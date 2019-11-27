@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "corsheaders",
     "api.apps.ApiConfig",
+    "algorithm.apps.AlgorithmConfig",
     "rest_framework",
     'rest_framework.authtoken',
     "django_filters",
@@ -76,7 +77,6 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'app.urls'
-
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -194,6 +194,7 @@ STATIC_ROOT = os.path.join(os.path.dirname(BASE_DIR), 'static')
 
 MEDIA_ROOT=os.path.join(BASE_DIR,'common_static/images')
 MEDIA_URL = "/static/images/"
+
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.163.com'

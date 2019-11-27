@@ -23,7 +23,7 @@ from app.utils.Viewset import ApiModelViewSet
 from app.utils.celery_function import generate_verify_email_url
 from app.utils.filter import UserFilter
 from celery_tasks.email.tasks import send_find_password_email
-from .models import User, Project, Document, ProjectUser, Algorithm
+from .models import User, Project, Document, ProjectUser
 from . import serializers
 from .permissions import ProjectOperationPermission, DocumentOperationPermission, LabelOperationPermission, \
     AnnotationOperationPermission, ProjectUserPermission, UserOperationPermission
@@ -396,18 +396,18 @@ class UsersInProjectView(ApiModelViewSet):
         return Response(serializer.data)
 
 
-class AlgorithmView(ApiModelViewSet):
-    def get_serializer_class(self):
-        if self.action == "update":
-            return serializers.UpdateAlgorithmSerializer
-        else:
-            return serializers.AlgorithmSerializer
-
-    def get_queryset(self):
-        if self.request.user.is_superuser:
-            return Algorithm.objects.filter(is_delete=False)
-        else:
-            raise PermissionDenied("权限不足")
+# class AlgorithmView(ApiModelViewSet):
+#     def get_serializer_class(self):
+#         if self.action == "update":
+#             return serializers.UpdateAlgorithmSerializer
+#         else:
+#             return serializers.AlgorithmSerializer
+#
+#     def get_queryset(self):
+#         if self.request.user.is_superuser:
+#             return Algorithm.objects.filter(is_delete=False)
+#         else:
+#             raise PermissionDenied("权限不足")
 
 
 class SendEmail(GenericAPIView):
@@ -485,15 +485,10 @@ class DocumentOperatingHistoryView(CreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # user_id
         user_id = request.user.id
-        # 查询redis  list
         redis_conn = get_redis_connection('history')
-        # doc_id_list = redis_conn.lrange('history_%s' % user_id, 0, constants.USER_BROWSE_HISTORY_MAX_LIMIT)
         dict_list = []
         doc_list = redis_conn.lrange('history_list_%s' % user_id,0,-1)
-        # user_hash = redis_conn.hgetall('history_%s' % user_id)
-        # value = pickle.loads(base64.b64decode(user_hash))
         for doc_id in doc_list:
             user_hash = redis_conn.hget('history_%s' % user_id,doc_id)
             value = pickle.loads(base64.b64decode(user_hash))

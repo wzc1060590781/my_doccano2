@@ -20,7 +20,7 @@ from rest_framework_jwt.settings import api_settings
 from api import constants
 from app import settings
 from app.utils.upload_text_utils import val_text_name, get_text_str, val_text_format
-from .models import User, Project, ProjectUser, Document, Label, Annotation, Algorithm
+from .models import User, Project, ProjectUser, Document, Label, Annotation
 
 
 class UpdateSelfSerializer(serializers.ModelSerializer):
@@ -592,63 +592,6 @@ class UpdateProjectRoleSerializer(serializers.ModelSerializer):
         else:
             raise PermissionDenied("权限不足")
 
-
-class AlgorithmSerializer(serializers.ModelSerializer):
-    code_url = serializers.CharField(read_only=True)
-    model_url = serializers.CharField(read_only=True)
-    algorithm_file = serializers.FileField(write_only=True)
-
-    class Meta:
-        model = Algorithm
-        fields = (
-            "id", "algorithm_type", "name", "mini_quantity", "code_url", "model_url", "description", "algorithm_file")
-
-    def validate(self, attrs):
-        # text = attrs.get("algorithm_file", None)
-        f = self.context["request"].FILES.get('algorithm_file', None)
-        if not f:
-            raise serializers.ValidationError('未上传文件')
-        if not f.name.endswith(".py"):
-            raise serializers.ValidationError('文件格式有误，请上传.py格式文件')
-        file_path = os.path.join(settings.MEDIA_ROOT, f.name)
-        with open(file_path, 'wb') as fp:
-            for info in f.chunks():
-                fp.write(info)
-            fp.close()
-        attrs["code_url"] = os.path.join(settings.MEDIA_ROOT, f.name)
-        attrs["model_url"] = os.path.join(file_path[:-3], f.name)
-        return attrs
-
-    def create(self, validated_data):
-        del validated_data["algorithm_file"]
-        return super().create(validated_data)
-
-
-class UpdateAlgorithmSerializer(serializers.ModelSerializer):
-    code_url = serializers.CharField(read_only=True)
-    model_url = serializers.CharField(read_only=True)
-    algorithm_file = serializers.FileField(allow_empty_file=True, read_only=True)
-
-    class Meta:
-        model = Algorithm
-        fields = (
-            "id", "algorithm_type", "name", "mini_quantity", "code_url", "model_url", "description", "algorithm_file")
-
-    def validate(self, attrs):
-        # text = attrs.get("algorithm_file", None)
-        f = self.context["request"].FILES.get('algorithm_file', None)
-        if not f:
-            return attrs
-        if not f.name.endswith(".py"):
-            raise serializers.ValidationError('文件格式有误，请上传.py格式文件')
-        file_path = os.path.join(settings.MEDIA_ROOT, f.name)
-        with open(file_path, 'wb') as fp:
-            for info in f.chunks():
-                fp.write(info)
-            fp.close()
-        attrs["code_url"] = os.path.join(settings.MEDIA_ROOT, f.name)
-        attrs["model_url"] = os.path.join(file_path[:-3], f.name)
-        return attrs
 
 class AddDocumentOperatingHistorySerializer(serializers.Serializer):
     doc_id = serializers.IntegerField(label="文本id", min_value=1)
