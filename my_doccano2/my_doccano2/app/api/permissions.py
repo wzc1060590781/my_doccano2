@@ -130,3 +130,18 @@ class ProjectUserPermission(BasePermission):
                 return False
         else:
             return False
+
+class ProjectAlgorithmPermission(BasePermission):
+    def has_permission(self, request, view):
+        user_id = request.user.id
+        user =  User.objects.get(pk=user_id)
+        if request.user.is_superuser:
+            return True
+        project_id = view.kwargs.get('project_id') or request.query_params.get('project_id')
+        project = get_object_or_404(Project,pk=project_id)
+        project_user = ProjectUser.objects.filter(user=user,project=project)
+        if not project_user or project_user.role != "project_owner":
+            return False
+        else:
+            return True
+

@@ -194,7 +194,7 @@ STATIC_ROOT = os.path.join(os.path.dirname(BASE_DIR), 'static')
 
 MEDIA_ROOT=os.path.join(BASE_DIR,'common_static/images')
 MEDIA_URL = "/static/images/"
-
+ALGORITHM_ROOT = os.path.join(MEDIA_ROOT,"algorithm")
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.163.com'

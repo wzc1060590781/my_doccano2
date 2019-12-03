@@ -16,4 +16,4 @@ celery_app = Celery('app',broker="redis://127.0.0.1/14")
 celery_app.config_from_object('celery_tasks.config')
 
 # 导入任务
-celery_app.autodiscover_tasks(['celery_tasks.email'])
+celery_app.autodiscover_tasks(['celery_tasks.email',"celery_tasks.algorithm"])

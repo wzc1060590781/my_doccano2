@@ -1,4 +1,6 @@
 import base64
+import json
+import os
 import pickle
 
 from django.contrib.auth.decorators import permission_required
@@ -9,24 +11,27 @@ from django.shortcuts import get_object_or_404
 # from rest_framework import status
 from django_filters.rest_framework import DjangoFilterBackend
 from django_redis import get_redis_connection
-from rest_framework import status
+from rest_framework import status, mixins
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.generics import GenericAPIView, CreateAPIView, UpdateAPIView
+from rest_framework.generics import GenericAPIView, CreateAPIView, UpdateAPIView, RetrieveAPIView, ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_jwt.views import ObtainJSONWebToken
 
+from algorithm.models import Algorithm
+from algorithm.serializers import AlgorithmSerializer
 from api import constants
-from api.serializers import ResetPasswordSerializer
+from api.serializers import ResetPasswordSerializer, DocumentFromDBSerializer
 from app.utils.Viewset import ApiModelViewSet
-from app.utils.celery_function import generate_verify_email_url
+from app.utils.celery_function import generate_verify_email_url, generate_doc_list
 from app.utils.filter import UserFilter
+from celery_tasks.algorithm.tasks import train_model
 from celery_tasks.email.tasks import send_find_password_email
 from .models import User, Project, Document, ProjectUser
 from . import serializers
 from .permissions import ProjectOperationPermission, DocumentOperationPermission, LabelOperationPermission, \
-    AnnotationOperationPermission, ProjectUserPermission, UserOperationPermission
+    AnnotationOperationPermission, ProjectUserPermission, UserOperationPermission, ProjectAlgorithmPermission
 
 
 class UsernameCountView(APIView):
@@ -537,15 +542,68 @@ class StatisticView(APIView):
         data["remaining"] = project.documents.filter(is_annoteated=False).count()
         return Response(data=data, status=status.HTTP_200_OK)
 
-# class MyException(ModelViewSet):
-#     def create(self, request, *args, **kwargs):
-#         return Response({"message": "路径错误", "success": False, "status": 404})
-#
-#     def retrieve(self, request, *args, **kwargs):
-#         return Response({"message": "路径错误", "success": False, "status": 404})
-#
-#     def update(self, request, *args, **kwargs):
-#         return Response({"message": "路径错误", "success": False, "status": 404})
-#
-#     def destroy(self, request, *args, **kwargs):
-#         return Response({"message": "路径错误", "success": False, "status": 404})
+class ChoseAlgorithmView(ListAPIView):
+    serializer_class = AlgorithmSerializer
+    permission_classes = [ProjectAlgorithmPermission]
+    def get_queryset(self):
+        project_id = self.kwargs['project_id']
+        project = get_object_or_404(Project,pk=project_id)
+        return Algorithm.objects.filter(algorithm_type=project.project_type)
+
+class TrainModelView(APIView):
+    def post(self,request,*args,**kwargs):
+        algorithm_id = request.data.get("algorithm_id")
+        if not algorithm_id:
+            return Response(
+                {
+                    "status" : status.HTTP_400_BAD_REQUEST,
+                    "message":"缺少参数",
+                    "success":False
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        algorithm = get_object_or_404(Algorithm,pk=algorithm_id)
+        if not algorithm:
+            return Response(
+                {
+                    "status": status.HTTP_400_BAD_REQUEST,
+                    "message": "不存在该算法",
+                    "success": False
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        project_id = self.kwargs["project_id"]
+        project = get_object_or_404(Project,pk=project_id)
+        if project.project_type != algorithm.algorithm_type:
+            return Response(
+                {
+                    "status": status.HTTP_400_BAD_REQUEST,
+                    "message": "算法和项目不匹配",
+                    "success": False
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        # if project.documents.filter(is_annoteated=True).count()< algorithm.mini_quantity:
+        #     return Response(
+        #         {
+        #             "status": status.HTTP_400_BAD_REQUEST,
+        #             "message": "打标文件未达到算法最低要求",
+        #             "success": False
+        #         },
+        #         status=status.HTTP_400_BAD_REQUEST
+        #     )
+        # TODO
+        doc_list = generate_doc_list(project_id)
+        config_name = str(project_id)+"_"+str(algorithm_id)+".json"
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),"common_static/configs/"+config_name)
+        with open(config_path,"w",encoding="utf8") as f:
+            json.dump(doc_list,f,ensure_ascii=False,indent=2)
+        algorithm_path = algorithm.algorithm_file.path
+        train_model.delay(algorithm_path,config_path)
+        return Response(
+            {
+                "code": 200,
+                "message": "正在训练模型",
+                "success": True,
+            }, status=status.HTTP_200_OK
+        )

@@ -638,3 +638,26 @@ class AddDocumentOperatingHistorySerializer(serializers.Serializer):
         pl.ltrim(redis_list_key, 0, constants.USER_OPERATE_HISTORY_MAX_LIMIT - 1)
         pl.execute()
         return validated_data
+
+class TrainLabelSerializer(serializers.ModelSerializer):
+    text = serializers.CharField(read_only=True)
+    class Meta:
+        model = Label
+        fields = ["text"]
+class subAnnotationSerializer(serializers.ModelSerializer):
+
+    label = TrainLabelSerializer(read_only=True)
+
+    class Meta:
+        model = Annotation
+        fields = ["label","start_offset", "end_offset",]
+
+class DocumentFromDBSerializer(serializers.ModelSerializer):
+    text = serializers.CharField(read_only=True)
+    annotations = subAnnotationSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Document
+        fields = ('id', "text",  "annotations")
+
+
