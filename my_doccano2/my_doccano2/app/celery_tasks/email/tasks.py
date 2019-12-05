@@ -2,30 +2,22 @@ from email.header import Header
 from email.mime.text import MIMEText
 from smtplib import SMTP_SSL
 
-from django.core.mail import send_mail
-from django.conf import settings
+from app import settings
 from celery_tasks.main import celery_app
 
 
 @celery_app.task(name='send_find_password_email')
 def send_find_password_email(to_email, verify_url):
-    # subject = "打标平台找回密码验证"
-    # html_message = '<p>尊敬的用户您好！</p>' \
-    #                '<p>感谢您使用打标签平台。</p>' \
-    #                '<p>您的邮箱为：%s 。请点击此链接找回密码：</p>' \
-    #                '<p><a href="%s">%s<a></p>' % (to_email, verify_url, verify_url)
-    # send_mail(subject, "", settings.EMAIL_FROM, [to_email], html_message=html_message)
-
     html_message = '<p>尊敬的用户您好！</p>' \
                    '<p>感谢您使用打标签平台。</p>' \
                    '<p>您的邮箱为：%s 。请点击此链接找回密码：</p>' \
                    '<p><a href="%s">%s<a></p>' % (to_email, verify_url, "点击此处重置密码")
     mail_info = {
-        "from": "wzc18220844786@163.com",
+        "from": settings.EMAIL_FROM,
         "to": to_email,
-        "hostname": "smtp.163.com",
-        "username": "wzc18220844786@163.com",
-        "password": "123456789abc",
+        "hostname": settings.EMAIL_HOST,
+        "username": settings.EMAIL_HOST_USER,
+        "password": settings.EMAIL_HOST_PASSWORD,
         "mail_subject": "打标平台邮件",
         "mail_text": html_message,
         "mail_encoding": "utf-8"

@@ -10,9 +10,9 @@ from celery_tasks.main import celery_app
 
 
 @celery_app.task(name='train_model')
-def train_model(algorithm_file,config_path):
+def train_model(algorithm_file,config_path,model_path):
     print(config_path)
-    os.system(algorithm_file)
+    os.system(algorithm_file+" "+config_path+" "+model_path)
     # with open("/common_static/configs")
     # nermi = trainingModel(doc_list)
     # # nermi.trainingModel(doc_list)

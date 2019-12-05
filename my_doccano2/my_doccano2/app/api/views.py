@@ -23,6 +23,7 @@ from algorithm.models import Algorithm
 from algorithm.serializers import AlgorithmSerializer
 from api import constants
 from api.serializers import ResetPasswordSerializer, DocumentFromDBSerializer
+from app import settings
 from app.utils.Viewset import ApiModelViewSet
 from app.utils.celery_function import generate_verify_email_url, generate_doc_list
 from app.utils.filter import UserFilter
@@ -583,23 +584,27 @@ class TrainModelView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
-        # if project.documents.filter(is_annoteated=True).count()< algorithm.mini_quantity:
-        #     return Response(
-        #         {
-        #             "status": status.HTTP_400_BAD_REQUEST,
-        #             "message": "打标文件未达到算法最低要求",
-        #             "success": False
-        #         },
-        #         status=status.HTTP_400_BAD_REQUEST
-        #     )
+        if project.documents.filter(is_annoteated=True).count()< algorithm.mini_quantity:
+            return Response(
+                {
+                    "status": status.HTTP_400_BAD_REQUEST,
+                    "message": "打标文件未达到算法最低要求",
+                    "success": False
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
         # TODO
         doc_list = generate_doc_list(project_id)
         config_name = str(project_id)+"_"+str(algorithm_id)+".json"
-        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),"common_static/configs/"+config_name)
+        config_path = os.path.join(settings.CONFIG_ROOT,config_name)
         with open(config_path,"w",encoding="utf8") as f:
             json.dump(doc_list,f,ensure_ascii=False,indent=2)
         algorithm_path = algorithm.algorithm_file.path
-        train_model.delay(algorithm_path,config_path)
+        model_dir_name = "%s_%s_model"%(project_id,algorithm.id)
+        model_path = os.path.join(settings.MODEL_ROOT,model_dir_name)
+        if not os.path.exists(model_path):
+            os.makedirs(model_path)
+        train_model.delay(algorithm_path,config_path,model_path)
         return Response(
             {
                 "code": 200,
