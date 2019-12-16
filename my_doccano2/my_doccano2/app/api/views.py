@@ -29,7 +29,7 @@ from app.utils.celery_function import generate_verify_email_url, generate_doc_li
 from app.utils.filter import UserFilter
 from celery_tasks.algorithm.tasks import train_model
 from celery_tasks.email.tasks import send_find_password_email
-from .models import User, Project, Document, ProjectUser
+from .models import User, Project, Document, ProjectUser, Task
 from . import serializers
 from .permissions import ProjectOperationPermission, DocumentOperationPermission, LabelOperationPermission, \
     AnnotationOperationPermission, ProjectUserPermission, UserOperationPermission, ProjectAlgorithmPermission
@@ -39,23 +39,26 @@ class UsernameCountView(APIView):
     """
     用户名数量
     """
+
     def get(self, request, username):
         """
         获取指定用户名数量
         """
         count = User.objects.filter(username=username).count()
         data = {
-            "status":200,
-            "message":"请求成功",
+            "status": 200,
+            "message": "请求成功",
             'username': username,
             'count': count
         }
         return Response(data)
 
+
 class MobileCountView(APIView):
     """
     手机号数量
     """
+
     def get(self, request, phone_number):
         """
         获取指定手机号数量
@@ -69,10 +72,12 @@ class MobileCountView(APIView):
         }
         return Response(data)
 
+
 class EamilCountView(APIView):
     """
     手机号数量
     """
+
     def get(self, request, email):
         """
         获取指定手机号数量
@@ -86,6 +91,7 @@ class EamilCountView(APIView):
         }
         return Response(data)
 
+
 class UserAuthorizeView(ObtainJSONWebToken):
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
@@ -95,9 +101,10 @@ class UserAuthorizeView(ObtainJSONWebToken):
                 "success": False,
                 "message": "用户名和密码不匹配",
             }
-            return Response(response,status=status.HTTP_400_BAD_REQUEST)
+            return Response(response, status=status.HTTP_400_BAD_REQUEST)
         else:
             return response
+
 
 class UserView(ApiModelViewSet):
     """
@@ -108,7 +115,7 @@ class UserView(ApiModelViewSet):
     queryset = User.objects.filter(is_delete=False)
     filter_backends = [DjangoFilterBackend]
     filter_class = UserFilter
-    filter_fields = ("username","project")
+    filter_fields = ("username", "project")
 
     def get_serializer_class(self):
         if self.action == "update":
@@ -130,7 +137,7 @@ class UserView(ApiModelViewSet):
             data["status"] = status.HTTP_403_FORBIDDEN
             data["success"] = False
             data["message"] = "没有删除该用户权限"
-            return Response(data,status=status.HTTP_403_FORBIDDEN)
+            return Response(data, status=status.HTTP_403_FORBIDDEN)
         instance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -194,14 +201,42 @@ class DocView(ApiModelViewSet):
 
     def get_queryset(self):
         project = get_object_or_404(Project, pk=self.kwargs['project_id'])
-        if project in self.request.user.project_set.all() or self.request.user.is_superuser:
+        user_id = self.request.query_params.get("user_id")
+        # 是查看自己在该项目所接收任务的文本
+        if not user_id:
             qs = project.documents.all().filter(is_delete=False)
-            if project.randomize_document_order:
-                return qs.order_by("?")
-            else:
+            if self.request.user.is_superuser:
                 return qs
+            project_user = ProjectUser.objects.get(project=project,user_id=self.request.user.id)
+            if project_user:
+                if project_user.role == "project_owner":
+                    return qs
+                else:
+                    doc_ids = Task.objects.filter(user_id=self.request.user.id, project=project).values_list("document_id")
+                    qs = Document.objects.get(pk__in=doc_ids)
+                    return qs
+            else:
+                raise PermissionDenied
+        # 查看他人在该项目接收的任务的文本
         else:
-            raise PermissionDenied
+            doc_ids = Task.objects.filter(user_id=user_id, project=project).values_list("document_id")
+            qs = Document.objects.get(pk__in=doc_ids)
+            if self.request.user.is_superuser:
+                return qs
+            project_user = ProjectUser.objects.get(project=project, user_id=user_id)
+            if project_user:
+                if project_user.role == "project_owner":
+                    return qs
+                else:
+                    raise PermissionDenied
+        # if project in self.request.user.project_set.all() or self.request.user.is_superuser:
+        #     qs = project.documents.all().filter(is_delete=False)
+        #     if project.randomize_document_order:
+        #         return qs.order_by("?")
+        #     else:
+        #         return qs
+        # else:
+        #     raise PermissionDenied
 
     def get(self, request, *args, **kwargs):
         response = super().get(request, *args, **kwargs)
@@ -283,7 +318,7 @@ class LabelView(ApiModelViewSet):
 
     def update(self, request, *args, **kwargs):
         kwargs["partial"] = True
-        return super().update(request,*args,**kwargs)
+        return super().update(request, *args, **kwargs)
 
 
 class AnnotationView(ApiModelViewSet):
@@ -415,7 +450,6 @@ class UsersInProjectView(ApiModelViewSet):
 #         else:
 #             raise PermissionDenied("权限不足")
 
-
 class SendEmail(GenericAPIView):
     def post(self, request):
         email = request.data["email"]
@@ -431,13 +465,13 @@ class SendEmail(GenericAPIView):
             }, status=status.HTTP_200_OK)
 
 class VerifyToken(GenericAPIView):
-    def post(self,request):
+    def post(self, request):
         token = request.data["token"]
         if not token:
             response_data = {
-                "status":400,
-                "success":False,
-                "message":"缺少token"
+                "status": 400,
+                "success": False,
+                "message": "缺少token"
             }
         else:
             user = User.check_verify_email_token(token)
@@ -446,10 +480,10 @@ class VerifyToken(GenericAPIView):
                     "status": 200,
                     "success": True,
                     "message": "验证成功",
-                    "data":{
-                        "id":user.id,
-                        "email":user.email,
-                        "token":token
+                    "data": {
+                        "id": user.id,
+                        "email": user.email,
+                        "token": token
                     }
                 }
             else:
@@ -458,7 +492,7 @@ class VerifyToken(GenericAPIView):
                     "success": False,
                     "message": "token有误或已过期"
                 }
-        return Response(response_data,status=response_data["status"])
+        return Response(response_data, status=response_data["status"])
 
 class ResetPassword(UpdateAPIView):
     serializer_class = ResetPasswordSerializer
@@ -476,12 +510,12 @@ class ResetPassword(UpdateAPIView):
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        response_data={}
+        response_data = {}
         response_data["status"] = 200
         response_data["success"] = True
         response_data["message"] = "修改成功"
         response_data["data"] = serializer.data
-        return Response(response_data,status=status.HTTP_200_OK)
+        return Response(response_data, status=status.HTTP_200_OK)
 
 class DocumentOperatingHistoryView(CreateAPIView):
     """
@@ -494,9 +528,9 @@ class DocumentOperatingHistoryView(CreateAPIView):
         user_id = request.user.id
         redis_conn = get_redis_connection('history')
         dict_list = []
-        doc_list = redis_conn.lrange('history_list_%s' % user_id,0,-1)
+        doc_list = redis_conn.lrange('history_list_%s' % user_id, 0, -1)
         for doc_id in doc_list:
-            user_hash = redis_conn.hget('history_%s' % user_id,doc_id)
+            user_hash = redis_conn.hget('history_%s' % user_id, doc_id)
             value = pickle.loads(base64.b64decode(user_hash))
             doc = Document.objects.get(pk=doc_id)
             if not doc:
@@ -519,16 +553,14 @@ class DocumentOperatingHistoryView(CreateAPIView):
         dict["data"] = serializer.data
         return Response(dict, status=status.HTTP_200_OK)
 
-
     def create(self, request, *args, **kwargs):
-        response = super().create(request,*args,**kwargs)
+        response = super().create(request, *args, **kwargs)
         resp = {}
         resp["code"] = status.HTTP_201_CREATED
         resp["success"] = True
         resp["message"] = "添加成功"
         resp["data"] = response.data
-        return Response(resp,status=status.HTTP_201_CREATED)
-
+        return Response(resp, status=status.HTTP_201_CREATED)
 
 class StatisticView(APIView):
     def get(self, request, *args, **kwargs):
@@ -546,24 +578,25 @@ class StatisticView(APIView):
 class ChoseAlgorithmView(ListAPIView):
     serializer_class = AlgorithmSerializer
     permission_classes = [ProjectAlgorithmPermission]
+
     def get_queryset(self):
         project_id = self.kwargs['project_id']
-        project = get_object_or_404(Project,pk=project_id)
+        project = get_object_or_404(Project, pk=project_id)
         return Algorithm.objects.filter(algorithm_type=project.project_type)
 
 class TrainModelView(APIView):
-    def post(self,request,*args,**kwargs):
+    def post(self, request, *args, **kwargs):
         algorithm_id = request.data.get("algorithm_id")
         if not algorithm_id:
             return Response(
                 {
-                    "status" : status.HTTP_400_BAD_REQUEST,
-                    "message":"缺少参数",
-                    "success":False
+                    "status": status.HTTP_400_BAD_REQUEST,
+                    "message": "缺少参数",
+                    "success": False
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
-        algorithm = get_object_or_404(Algorithm,pk=algorithm_id)
+        algorithm = get_object_or_404(Algorithm, pk=algorithm_id)
         if not algorithm:
             return Response(
                 {
@@ -574,7 +607,7 @@ class TrainModelView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         project_id = self.kwargs["project_id"]
-        project = get_object_or_404(Project,pk=project_id)
+        project = get_object_or_404(Project, pk=project_id)
         if project.project_type != algorithm.algorithm_type:
             return Response(
                 {
@@ -584,7 +617,7 @@ class TrainModelView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
-        if project.documents.filter(is_annoteated=True).count()< algorithm.mini_quantity:
+        if project.documents.filter(is_annoteated=True).count() < algorithm.mini_quantity:
             return Response(
                 {
                     "status": status.HTTP_400_BAD_REQUEST,
@@ -595,16 +628,16 @@ class TrainModelView(APIView):
             )
         # TODO
         doc_list = generate_doc_list(project_id)
-        config_name = str(project_id)+"_"+str(algorithm_id)+".json"
-        config_path = os.path.join(settings.CONFIG_ROOT,config_name)
-        with open(config_path,"w",encoding="utf8") as f:
-            json.dump(doc_list,f,ensure_ascii=False,indent=2)
+        config_name = str(project_id) + "_" + str(algorithm_id) + ".json"
+        config_path = os.path.join(settings.CONFIG_ROOT, config_name)
+        with open(config_path, "w", encoding="utf8") as f:
+            json.dump(doc_list, f, ensure_ascii=False, indent=2)
         algorithm_path = algorithm.algorithm_file.path
-        model_dir_name = "%s_%s_model"%(project_id,algorithm.id)
-        model_path = os.path.join(settings.MODEL_ROOT,model_dir_name)
+        model_dir_name = "%s_%s_model" % (project_id, algorithm.id)
+        model_path = os.path.join(settings.MODEL_ROOT, model_dir_name)
         if not os.path.exists(model_path):
             os.makedirs(model_path)
-        train_model.delay(algorithm_path,config_path,model_path)
+        train_model.delay(algorithm_path, config_path, model_path)
         return Response(
             {
                 "code": 200,
@@ -612,3 +645,64 @@ class TrainModelView(APIView):
                 "success": True,
             }, status=status.HTTP_200_OK
         )
+
+# class TaskView(ApiModelViewSet):
+#     serializer_class = serializers.DocumentSerializer
+#
+#     def get_queryset(self):
+#         user_id = self.kwargs["user_id"]
+#         project_id = self.kwargs["project_id"]
+#         project = get_object_or_404(Project, pk=project_id)
+#         user = get_object_or_404(User, pk=user_id)
+#         if user not in project.users.all():
+#             raise Http404
+#         doc_ids = Task.objects.filter(user_id=user_id, project_id=project_id).values_list("document_id")
+#         documents = Document.objects.get(pk__in=doc_ids).order_by("create_time")
+#         return documents
+#
+#     def list(self, request, *args, **kwargs):
+#         queryset = self.get_queryset()
+#         serializer = self.get_serializer(queryset, many=True)
+#         data = serializer.data
+#         return Response(
+#             {
+#                 "status": 200,
+#                 "success": True,
+#                 "data": data
+#             }, status=status.HTTP_200_OK)
+
+# class ProjectTaskView(APIView):
+#     def get(self):
+#         user_id = self.request.user
+#         tasks = Task.objects.filter(user_id=user_id)
+#         project_list = tasks.values_list("project_id")
+#         projects = Project.obejcts.filter(pk__in=project_list)
+#         for project in projects:
+#             project_tasks = tasks.filter(project_id=project.id)
+#             total_count = project_tasks.count()
+#             complete_count = tasks.filter(is_complete=True).count()
+#             project.total_count = total_count
+#             project.complete_count = complete_count
+#         data = serializers.ProjectTaskSerializer(projects, many=True)
+#         return Response(
+#             {
+#                 "status": status.HTTP_200_OK,
+#                 "success": True,
+#                 "message": "成功",
+#                 "data": data
+#             }, status=status.HTTP_200_OK
+#         )
+#
+class AssignTask(APIView):
+
+    def post(self):
+        assign_method = self.request.query_params.get("assign_method")
+        if assign_method not in ["random_assgin","manual_assign"]:
+            return Response(
+                {
+                    "status": status.HTTP_400_BAD_REQUEST,
+                    "success": False,
+                    "message": "参数错误",
+                }, status=status.HTTP_400_BAD_REQUEST
+            )
+        if assign_method == "random_assign":

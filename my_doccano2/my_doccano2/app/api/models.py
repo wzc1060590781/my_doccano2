@@ -16,7 +16,6 @@ PROJECT_CHOICES = (
     (SEQ2SEQ, 'sequence to sequence'),
 )
 
-
 class BaseModel(models.Model):
     create_time = models.DateTimeField(auto_now_add=True, verbose_name="创建时间", help_text="创建时间")
     update_time = models.DateTimeField(auto_now=True, verbose_name="更新时间", help_text="更新时间")
@@ -25,10 +24,37 @@ class BaseModel(models.Model):
         abstract = True
 
 
+class Document(BaseModel):
+    project = models.ForeignKey("Project", related_name="documents", blank=True, on_delete=models.SET_NULL, null=True,
+                                verbose_name="所属项目", help_text="所属项目")
+    text = models.TextField(verbose_name="文书内容", help_text="文书内容")
+    is_annoteated = models.BooleanField(default=False, verbose_name="文本是否已被标注", help_text="是否被标注")
+    is_delete = models.BooleanField(default=False, verbose_name="文本是否被逻辑删除", help_text="是否被删除")
+    title = models.CharField(verbose_name="文档标题", max_length=100, null=True, help_text="文档标题")
+
+    class Meta:
+        db_table = "documents"
+        verbose_name = "文书表"
+
+    def __str__(self):
+        return self.text[:50]
+
+    def delete(self, using=None, keep_parents=False):
+        """重写数据库删除方法实现逻辑删除"""
+        self.is_delete = True
+        self.save()
+
 class User(AbstractUser):
     phone_number = models.CharField(max_length=11, null=True, verbose_name="手机号",unique=True)
     is_delete = models.BooleanField(default=False)
     email = models.EmailField(unique=True, blank=False)
+    documents = models.ManyToManyField(
+        Document,
+        through='Task',  ## 自定义中间表
+        through_fields=('user', 'document'), help_text="用户"
+    )
+
+
 
     def __str__(self):
         return self.username
@@ -58,7 +84,6 @@ class User(AbstractUser):
                 return None
             else:
                 return user
-
 
 
 class Project(BaseModel):
@@ -100,27 +125,6 @@ class ProjectUser(BaseModel):
         unique_together = (
             ('project', 'user'),
         )
-
-
-class Document(BaseModel):
-    project = models.ForeignKey("Project", related_name="documents", blank=True, on_delete=models.SET_NULL, null=True,
-                                verbose_name="所属项目", help_text="所属项目")
-    text = models.TextField(verbose_name="文书内容", help_text="文书内容")
-    is_annoteated = models.BooleanField(default=False, verbose_name="文本是否已被标注", help_text="是否被标注")
-    is_delete = models.BooleanField(default=False, verbose_name="文本是否被逻辑删除", help_text="是否被删除")
-    title = models.CharField(verbose_name="文档标题", max_length=100, null=True, help_text="文档标题")
-
-    class Meta:
-        db_table = "documents"
-        verbose_name = "文书表"
-
-    def __str__(self):
-        return self.text[:50]
-
-    def delete(self, using=None, keep_parents=False):
-        """重写数据库删除方法实现逻辑删除"""
-        self.is_delete = True
-        self.save()
 
 
 class Annotation(BaseModel):
@@ -173,6 +177,15 @@ class Label(BaseModel):
 
     def __str__(self):
         return self.text
+
+
+class Task(BaseModel):
+    user = models.ForeignKey(User, on_delete=models.CASCADE,
+                                help_text="项目")
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, help_text="用户")
+    project = models.ForeignKey("Project", on_delete=models.CASCADE, help_text="用户")
+    is_complete = models.BooleanField(default=False,help_text="用户")
+    # TODO
 
 
 # class Algorithm(BaseModel):

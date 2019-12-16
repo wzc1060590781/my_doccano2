@@ -20,7 +20,7 @@ from rest_framework_jwt.settings import api_settings
 from api import constants
 from app import settings
 from app.utils.upload_text_utils import val_text_name, get_text_str, val_text_format
-from .models import User, Project, ProjectUser, Document, Label, Annotation
+from .models import User, Project, ProjectUser, Document, Label, Annotation, Task
 
 
 class UpdateSelfSerializer(serializers.ModelSerializer):
@@ -660,4 +660,11 @@ class DocumentFromDBSerializer(serializers.ModelSerializer):
         model = Document
         fields = ('id', "text",  "annotations")
 
+class MyCharField(serializers.CharField):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        validator = EmailValidator(message=self.error_messages['invalid'])
+        self.validators.append(validator)
 
+class AssignTaskSerializer(serializers.Serializer):
+    doc_status = serializers.MyCharField()
