@@ -35,6 +35,9 @@ urlpatterns = [
     url(r"^operate_historys$",views.DocumentOperatingHistoryView.as_view()),
     url(r"^projects/(?P<project_id>\d+)/algorithms$",views.ChoseAlgorithmView.as_view()),
     url(r"^projects/(?P<project_id>\d+)/train_model",views.TrainModelView.as_view()),
+    # 分配任务
+    url(r"^projects/(?P<project_id>\d+)/tasks$",views.AssignTaskView.as_view({"post":"create","get":"list"})),
+
     # url(r"^projects/(?P<project_id>\d+)/users/(?P<user_id>\d+)/tasks", views.TaskView.as_view({'get': "list"})),
     # url(r"^projects_tasks$",views.ProjectTaskView.as_view()),
     # url(r"^projects/(?P<project_id>\d+)/tasks$",views.ProjectTaskView.as_view()),

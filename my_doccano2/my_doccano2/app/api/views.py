@@ -3,26 +3,21 @@ import json
 import os
 import pickle
 
-from django.contrib.auth.decorators import permission_required
-from django.core.mail import send_mail
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404
-# from rest_framework import status
 from django_filters.rest_framework import DjangoFilterBackend
 from django_redis import get_redis_connection
-from rest_framework import status, mixins
+from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.generics import GenericAPIView, CreateAPIView, UpdateAPIView, RetrieveAPIView, ListAPIView
+from rest_framework.generics import GenericAPIView, CreateAPIView, UpdateAPIView, ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_jwt.views import ObtainJSONWebToken
-
 from algorithm.models import Algorithm
 from algorithm.serializers import AlgorithmSerializer
-from api import constants
-from api.serializers import ResetPasswordSerializer, DocumentFromDBSerializer
+from api.serializers import ResetPasswordSerializer
 from app import settings
 from app.utils.Viewset import ApiModelViewSet
 from app.utils.celery_function import generate_verify_email_url, generate_doc_list
@@ -32,7 +27,7 @@ from celery_tasks.email.tasks import send_find_password_email
 from .models import User, Project, Document, ProjectUser, Task
 from . import serializers
 from .permissions import ProjectOperationPermission, DocumentOperationPermission, LabelOperationPermission, \
-    AnnotationOperationPermission, ProjectUserPermission, UserOperationPermission, ProjectAlgorithmPermission
+    AnnotationOperationPermission, ProjectUserPermission, ProjectAlgorithmPermission
 
 
 class UsernameCountView(APIView):
@@ -207,12 +202,13 @@ class DocView(ApiModelViewSet):
             qs = project.documents.all().filter(is_delete=False)
             if self.request.user.is_superuser:
                 return qs
-            project_user = ProjectUser.objects.get(project=project,user_id=self.request.user.id)
+            project_user = ProjectUser.objects.get(project=project, user_id=self.request.user.id)
             if project_user:
                 if project_user.role == "project_owner":
                     return qs
                 else:
-                    doc_ids = Task.objects.filter(user_id=self.request.user.id, project=project).values_list("document_id")
+                    doc_ids = Task.objects.filter(user_id=self.request.user.id, project=project).values_list(
+                        "document_id")
                     qs = Document.objects.get(pk__in=doc_ids)
                     return qs
             else:
@@ -464,6 +460,7 @@ class SendEmail(GenericAPIView):
                 "message": "发送成功"
             }, status=status.HTTP_200_OK)
 
+
 class VerifyToken(GenericAPIView):
     def post(self, request):
         token = request.data["token"]
@@ -494,6 +491,7 @@ class VerifyToken(GenericAPIView):
                 }
         return Response(response_data, status=response_data["status"])
 
+
 class ResetPassword(UpdateAPIView):
     serializer_class = ResetPasswordSerializer
 
@@ -516,6 +514,7 @@ class ResetPassword(UpdateAPIView):
         response_data["message"] = "修改成功"
         response_data["data"] = serializer.data
         return Response(response_data, status=status.HTTP_200_OK)
+
 
 class DocumentOperatingHistoryView(CreateAPIView):
     """
@@ -562,6 +561,7 @@ class DocumentOperatingHistoryView(CreateAPIView):
         resp["data"] = response.data
         return Response(resp, status=status.HTTP_201_CREATED)
 
+
 class StatisticView(APIView):
     def get(self, request, *args, **kwargs):
         project = get_object_or_404(Project, pk=self.kwargs['project_id'])
@@ -575,6 +575,7 @@ class StatisticView(APIView):
         data["remaining"] = project.documents.filter(is_annoteated=False).count()
         return Response(data=data, status=status.HTTP_200_OK)
 
+
 class ChoseAlgorithmView(ListAPIView):
     serializer_class = AlgorithmSerializer
     permission_classes = [ProjectAlgorithmPermission]
@@ -583,6 +584,7 @@ class ChoseAlgorithmView(ListAPIView):
         project_id = self.kwargs['project_id']
         project = get_object_or_404(Project, pk=project_id)
         return Algorithm.objects.filter(algorithm_type=project.project_type)
+
 
 class TrainModelView(APIView):
     def post(self, request, *args, **kwargs):
@@ -646,6 +648,7 @@ class TrainModelView(APIView):
             }, status=status.HTTP_200_OK
         )
 
+
 # class TaskView(ApiModelViewSet):
 #     serializer_class = serializers.DocumentSerializer
 #
@@ -693,16 +696,44 @@ class TrainModelView(APIView):
 #             }, status=status.HTTP_200_OK
 #         )
 #
-class AssignTask(APIView):
+class AssignTaskView(ApiModelViewSet):
+    filter_fields = ("user_id",)
 
-    def post(self):
-        assign_method = self.request.query_params.get("assign_method")
-        if assign_method not in ["random_assgin","manual_assign"]:
+    def get_serializer_class(self):
+        if self.action == "post":
+            assign_method = self.request.query_params.get("assign_method")
+            if assign_method not in ["random_assign", "manual_assign"]:
+                return
+            if assign_method == "random_assign":
+                return serializers.RandomAssignTaskSerializer
+            return serializers.ManualAssignTaskSerializer
+        elif self.action == "get":
+            return serializers.TaskListSerializer
+        elif self.action == "delete":
+            return serializers.ManualAssignTaskSerializer
+
+    def get_queryset(self):
+        project_id = self.kwargs["project_id"]
+        return Task.objects.filter(project_id=project_id)
+
+    def create(self, request, *args, **kwargs):
+        if not self.get_serializer_class():
             return Response(
                 {
                     "status": status.HTTP_400_BAD_REQUEST,
                     "success": False,
-                    "message": "参数错误",
+                    "message": "参数错误.....",
                 }, status=status.HTTP_400_BAD_REQUEST
             )
-        if assign_method == "random_assign":
+        response = super().create(request, *args, **kwargs)
+        data = response.data
+        dict = {}
+        dict["status"] = status.HTTP_200_OK
+        dict["success"] = True
+        dict["message"] = "成功"
+        dict["data"] = data
+        return Response(dict, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+
+        pass

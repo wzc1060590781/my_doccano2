@@ -3,13 +3,17 @@ import datetime
 import json
 import os
 import pickle
+import random
 import re
 import time
 
+import pymysql
 from django.contrib.auth.hashers import check_password
 
-from django.db import transaction
+from django.db import transaction, DatabaseError
 from django.db.models import Q
+from django.http import Http404
+from django.utils import timezone
 from django_redis import get_redis_connection
 
 from rest_framework import serializers
@@ -660,11 +664,123 @@ class DocumentFromDBSerializer(serializers.ModelSerializer):
         model = Document
         fields = ('id', "text",  "annotations")
 
-class MyCharField(serializers.CharField):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        validator = EmailValidator(message=self.error_messages['invalid'])
-        self.validators.append(validator)
 
-class AssignTaskSerializer(serializers.Serializer):
-    doc_status = serializers.MyCharField()
+
+class ManualAssignTaskSerializer(serializers.Serializer):
+    doc_list = serializers.ListField(child=serializers.IntegerField(),min_length=0,write_only=True)
+    user_id = serializers.IntegerField(min_value=0)
+    success_count = serializers.IntegerField(read_only=True)
+    total_count = serializers.IntegerField(read_only=True)
+
+    def validate(self, attrs):
+        doc_list = attrs["doc_list"]
+        project_id = self.context["view"].kwargs["project_id"]
+        project = get_object_or_404(Project,pk=project_id)
+        remove_list = []
+        total_count = len(doc_list)
+        for doc_id in doc_list:
+            doc_queryset = Document.objects.filter(pk=doc_id)
+            if not doc_queryset:
+                remove_list.append(doc_id)
+            elif doc_queryset[0] not in project.documents.all():
+                remove_list.append(doc_id)
+        for doc_id in remove_list:
+            doc_list.remove(doc_id)
+        user_id = attrs["user_id"]
+        # project_user_queryset = ProjectUser.objects.filter(project_id = project_id,user_id=user_id)
+        project_user = get_object_or_404(ProjectUser,project_id=project_id,user_id=user_id)
+        # if not project_user_queryset:
+        #         raise serializers.ValidationError("user_id有误")
+        attrs["project"] = project
+        attrs["total_count"] = total_count
+        return attrs
+
+    def create(self, validated_data):
+        doc_list = validated_data["doc_list"]
+        success_count = len(doc_list)
+        for doc_id in doc_list:
+            doc = Document.objects.get(pk=doc_id)
+            with transaction.atomic():
+                save_id = transaction.savepoint()
+                try:
+                    Task.objects.create(document=doc,project=validated_data["project"],user_id = validated_data["user_id"])
+                    doc.is_assigned = True
+                    doc.save()
+                except DatabaseError:
+                    transaction.savepoint_rollback(save_id)
+                    success_count -= 1
+        del validated_data["doc_list"]
+        del validated_data["project"]
+        validated_data["success_count"] = success_count
+        return validated_data
+
+class RandomAssignTaskSerializer(serializers.Serializer):
+    CHOICES = ((1, "assigned"), (2, "not_assigned"), (3, "both"))
+    status = serializers.ChoiceField(choices=CHOICES, write_only=True)
+    user_list = serializers.ListField(child=serializers.IntegerField(),min_length=1,write_only=True)
+    amount = serializers.IntegerField(min_value=1,write_only=True)
+
+    def validate(self, attrs):
+        user_list = attrs["user_list"]
+        amount = attrs["amount"]
+        project_id = self.context["view"].kwargs["project_id"]
+        project = get_object_or_404(Project,pk=project_id)
+        for user_id in user_list:
+            user = get_object_or_404(User,pk=user_id)
+            project_user_queryset = ProjectUser.objects.filter(project_id=project_id, user_id=user_id)
+            if not project_user_queryset:
+                raise Http404("%d用户不是项目成员"%user_id)
+        if attrs["status"] == 1:
+            docs = project.documents.filter(is_assigned=True,is_delete=False)
+        elif attrs["status"]==2:
+            docs = project.documents.filter(is_assigned=False, is_delete=False)
+        else:
+            docs = project.documents.all()
+        if docs.count()<amount:
+            amount = docs.count()
+        attrs["docs"] = docs
+        attrs["amount"] = amount
+        attrs["project_id"] = project_id
+        return attrs
+
+    def create(self, validated_data):
+        user_list = validated_data["user_list"]
+        doc_amount = validated_data["amount"]
+        docs = validated_data["docs"]
+        project_id = validated_data["project_id"]
+        user_amount = len(user_list)
+        remain_amount = doc_amount % user_amount
+        docs_ids_queryset = docs.values_list("id")
+        docs_ids_list = list(docs_ids_queryset)
+        random.shuffle(docs_ids_list)
+        index = 0
+        for i in range(len(user_list)):
+            if i < remain_amount:
+                docs_amount_for_everyuser = doc_amount // user_amount+1
+            else:
+                docs_amount_for_everyuser = doc_amount // user_amount
+            docs_for_user = docs_ids_list[index:index + docs_amount_for_everyuser]
+            user_id = user_list[i]
+            for doc_id in docs_for_user:
+                if Task.objects.filter(document_id=doc_id[0], project_id=project_id, user_id=user_id).exists():
+                    continue
+                else:
+                    with transaction.atomic():
+                        save_id = transaction.savepoint()
+                        try:
+                            task = Task.objects.create(document_id = doc_id[0],project_id = project_id,user_id = user_id)
+                            doc = Document.objects.get(pk=doc_id[0])
+                            doc.is_assigned = True
+                            doc.save()
+                        except DatabaseError:
+                            transaction.savepoint_rollback(save_id)
+            index = index + docs_amount_for_everyuser
+        return {}
+
+class TaskListSerializer(serializers.Serializer):
+    project_id = serializers.IntegerField(read_only=True)
+    is_complete = serializers.BooleanField(read_only=True)
+    document = DocumentSerializer(read_only=True)
+    class Meta:
+        model = Task
+        fields = ("id", "project_id", "is_complete","document")

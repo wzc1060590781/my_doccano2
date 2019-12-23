@@ -2,7 +2,7 @@ import string
 
 from django.contrib.auth.models import AbstractUser, Group, UserManager
 from django.db import models
-from itsdangerous import TimedJSONWebSignatureSerializer,BadData
+from itsdangerous import TimedJSONWebSignatureSerializer, BadData
 
 from api import constants
 from app import settings
@@ -15,6 +15,7 @@ PROJECT_CHOICES = (
     (SEQUENCE_LABELING, 'sequence labeling'),
     (SEQ2SEQ, 'sequence to sequence'),
 )
+
 
 class BaseModel(models.Model):
     create_time = models.DateTimeField(auto_now_add=True, verbose_name="创建时间", help_text="创建时间")
@@ -31,6 +32,7 @@ class Document(BaseModel):
     is_annoteated = models.BooleanField(default=False, verbose_name="文本是否已被标注", help_text="是否被标注")
     is_delete = models.BooleanField(default=False, verbose_name="文本是否被逻辑删除", help_text="是否被删除")
     title = models.CharField(verbose_name="文档标题", max_length=100, null=True, help_text="文档标题")
+    is_assigned = models.BooleanField(verbose_name="是否被分配", default=False)
 
     class Meta:
         db_table = "documents"
@@ -44,8 +46,9 @@ class Document(BaseModel):
         self.is_delete = True
         self.save()
 
+
 class User(AbstractUser):
-    phone_number = models.CharField(max_length=11, null=True, verbose_name="手机号",unique=True)
+    phone_number = models.CharField(max_length=11, null=True, verbose_name="手机号", unique=True)
     is_delete = models.BooleanField(default=False)
     email = models.EmailField(unique=True, blank=False)
     documents = models.ManyToManyField(
@@ -53,8 +56,6 @@ class User(AbstractUser):
         through='Task',  ## 自定义中间表
         through_fields=('user', 'document'), help_text="用户"
     )
-
-
 
     def __str__(self):
         return self.username
@@ -70,7 +71,8 @@ class User(AbstractUser):
 
     @staticmethod
     def check_verify_email_token(token):
-        serializer = TimedJSONWebSignatureSerializer(settings.SECRET_KEY, expires_in=constants.VERIFY_EMAIL_TOKEN_EXPIRES)
+        serializer = TimedJSONWebSignatureSerializer(settings.SECRET_KEY,
+                                                     expires_in=constants.VERIFY_EMAIL_TOKEN_EXPIRES)
         try:
             data = serializer.loads(token)
         except BadData:
@@ -91,7 +93,7 @@ class Project(BaseModel):
     randomize_document_order = models.BooleanField(default=False, verbose_name="是否乱序", help_text="是否乱序")
     description = models.TextField(default='', help_text="项目描述信息")
     project_type = models.CharField(max_length=30, choices=PROJECT_CHOICES, help_text="项目类型")
-    pic = models.ImageField(upload_to='project/',default="project/default.jpg")
+    pic = models.ImageField(upload_to='project/', default="project/default.jpg")
     users = models.ManyToManyField(
         User,
         through='ProjectUser',  ## 自定义中间表
@@ -172,7 +174,7 @@ class Label(BaseModel):
         verbose_name = "标记表"
         unique_together = (
             ('project', 'text'),
-            ('project','prefix_key', 'suffix_key'),
+            ('project', 'prefix_key', 'suffix_key'),
         )
 
     def __str__(self):
@@ -181,12 +183,18 @@ class Label(BaseModel):
 
 class Task(BaseModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE,
-                                help_text="项目")
+                             help_text="项目")
     document = models.ForeignKey(Document, on_delete=models.CASCADE, help_text="用户")
     project = models.ForeignKey("Project", on_delete=models.CASCADE, help_text="用户")
-    is_complete = models.BooleanField(default=False,help_text="用户")
-    # TODO
+    is_complete = models.BooleanField(default=False, help_text="用户")
 
+    # TODO
+    class Meta:
+        db_table = "tasks"
+        verbose_name = "任务表"
+        unique_together = (
+            ('user', 'document'),
+        )
 
 # class Algorithm(BaseModel):
 #     algorithm_type = models.CharField(max_length=30, choices=PROJECT_CHOICES, help_text="算法类型")
@@ -203,4 +211,3 @@ class Task(BaseModel):
 #     def delete(self, using=None, keep_parents=False):
 #         self.is_delete = True
 #         self.save()
-
